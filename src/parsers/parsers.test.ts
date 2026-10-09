@@ -48,3 +48,33 @@ describe('parseChat', () => {
     expect(parseChat('   ').success).toBe(false);
   });
 });
+
+describe('generic parser on non-chat text', () => {
+  const notice = `Reporting Time: 9:00 AM
+Venue: Seminar Hall
+Please keep these dates and timings in mind: Round 1 on 12 March, Round 2 on 14 March.
+Note: bring your ID card.`;
+
+  it('does not invent participants from labels or sentences', () => {
+    const r = parseChat(notice);
+    expect(r.success).toBe(true);
+    expect(r.conversation!.participants).toEqual(['Text']);
+    expect(r.conversation!.messageCount).toBe(1);
+    expect(r.conversation!.messages[0].content).toContain('Round 1');
+  });
+
+  it('still parses a short two-person chat with a one-off speaker', () => {
+    const r = parseChat('Asha: Can you send the file?\nRavi: Sure, tonight.');
+    expect(r.conversation!.participants).toEqual(['Asha', 'Ravi']);
+  });
+
+  it('keeps wrapped lines with the previous message', () => {
+    const r = parseChat('Asha: first line\nsecond line\nRavi: ok\nAsha: bye');
+    expect(r.conversation!.messages[0].content).toBe('first line\nsecond line');
+  });
+
+  it('never treats a long sentence before a colon as a sender', () => {
+    const r = parseChat('Priya: hi\nRavi: hello\nPriya: Please keep these dates and timings in mind: Friday');
+    expect(r.conversation!.participants).toEqual(['Priya', 'Ravi']);
+  });
+});

@@ -86,6 +86,18 @@ export class UpstreamError extends Error {
   }
 }
 
+export function upstreamMessage(e: unknown): string {
+  if (e instanceof UpstreamError) {
+    if (e.status === 400 || e.status === 401 || e.status === 403) {
+      return 'Cloud AI is not set up correctly (the Gemini API key was rejected). Check GEMINI_API_KEY in the server settings.';
+    }
+    if (e.status === 404) return 'Cloud AI model not available for this key. Set GEMINI_MODEL to a model your key can use.';
+    if (e.status === 429) return 'Cloud AI is busy or the free quota is used up. Wait a minute and try again.';
+    if (e.status >= 500) return 'Google’s AI service is temporarily unavailable. Try again shortly.';
+  }
+  return 'The AI service could not process this request.';
+}
+
 /** Try each model in turn; move on only when the model is missing or rate-limited/unavailable. */
 export async function callWithFallback(
   v: Validated,
@@ -182,8 +194,8 @@ export default async function handler(req: Req, res: Res): Promise<void> {
     const override = process.env.GEMINI_MODEL?.trim();
     const text = await callWithFallback(v, apiKey, override ? [override] : DEFAULT_MODELS);
     res.status(200).json({ text });
-  } catch {
-    // Deliberately generic: no upstream details or stack traces to the client.
-    res.status(502).json({ error: 'The AI service could not process this request.' });
+  } catch (e) {
+    // Safe, coarse reasons only: never upstream bodies, keys or stack traces.
+    res.status(502).json({ error: upstreamMessage(e) });
   }
 }

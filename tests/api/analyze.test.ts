@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import handler, { validate, callGemini, callWithFallback, rateLimited } from '../../api/analyze';
+import handler, { validate, callGemini, callWithFallback, rateLimited, upstreamMessage, UpstreamError } from '../../api/analyze';
 
 describe('validate', () => {
   it('accepts a good request', () => {
@@ -88,5 +88,14 @@ describe('handler', () => {
     expect(res.code).toBe(502);
     expect(JSON.stringify(res.body)).not.toMatch(/403|SECRET/);
     vi.unstubAllGlobals();
+  });
+});
+
+describe('upstreamMessage', () => {
+  it('maps upstream status to a safe, specific reason', () => {
+    expect(upstreamMessage(new UpstreamError(400))).toMatch(/GEMINI_API_KEY/);
+    expect(upstreamMessage(new UpstreamError(429))).toMatch(/busy|quota/i);
+    expect(upstreamMessage(new UpstreamError(503))).toMatch(/unavailable/i);
+    expect(upstreamMessage(new Error('boom: secret-key-123'))).not.toMatch(/secret/);
   });
 });

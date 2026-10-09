@@ -69,6 +69,12 @@ export default function App() {
   const [isExtractingActions, setIsExtractingActions] = useState(false);
   const [isAnalyzingPriorities, setIsAnalyzingPriorities] = useState(false);
 
+  // Show the first failure reason; later steps of the same run must not overwrite it.
+  const keepFirstError = useCallback(
+    (text: string) => setNotice((n) => (n?.kind === 'error' ? n : { kind: 'error', text })),
+    [],
+  );
+
   const cloudEnabled = engine === 'cloud';
   const useRules = () => engine === 'rules' || (engine === 'local' && !aiEngine.isReady());
 
@@ -170,10 +176,10 @@ export default function App() {
         console.error('Summary failed:', err);
         finalSummary = heuristicSummary(conv);
         setSummary(finalSummary);
-        setNotice({
-          kind: 'error',
-          text: (cloudEnabled && err instanceof Error ? err.message + ' ' : 'The AI returned an unreadable summary. ') + 'Showing a quick rule-based analysis instead.',
-        });
+        keepFirstError(
+          (cloudEnabled && err instanceof Error ? err.message + ' ' : 'The AI returned an unreadable summary. ') +
+            'Showing a quick rule-based analysis instead.',
+        );
       }
       setIsSummarizing(false);
 
@@ -189,7 +195,7 @@ export default function App() {
         console.error('Action items failed:', err);
         finalActions = heuristicActionItems(conv);
         setActionItems(finalActions);
-        setNotice({ kind: 'error', text: 'AI action-item extraction failed; showing rule-based results.' });
+        keepFirstError(cloudEnabled && err instanceof Error ? err.message + ' Showing rule-based results.' : 'AI action-item extraction failed; showing rule-based results.');
       }
       setIsExtractingActions(false);
       return { s: finalSummary, a: finalActions };
@@ -216,7 +222,7 @@ export default function App() {
       } catch (err) {
         console.error('Priority analysis failed:', err);
         setPriorities(heuristicPriorities(conv, name));
-        setNotice({ kind: 'error', text: 'AI priority analysis failed; showing rule-based results.' });
+        keepFirstError(cloudEnabled && err instanceof Error ? err.message + ' Showing rule-based results.' : 'AI priority analysis failed; showing rule-based results.');
       }
       setIsAnalyzingPriorities(false);
     },
