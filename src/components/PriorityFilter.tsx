@@ -33,38 +33,38 @@ export const PriorityFilter: React.FC<PriorityFilterProps> = ({ priorities, user
     const isExpanded = expandedSection === id;
     
     return (
-      <div className="border border-slate-700 bg-slate-800 rounded-xl overflow-hidden mb-3">
+      <div className="border border-zinc-700 bg-zinc-800 rounded-xl overflow-hidden mb-3">
         <button
           onClick={() => toggleSection(id)}
-          className="w-full flex items-center justify-between p-3.5 bg-slate-800 hover:bg-slate-750 transition-colors focus:outline-none"
+          className="w-full flex items-center justify-between p-3.5 bg-zinc-800 hover:bg-zinc-750 transition-colors focus:outline-none"
         >
           <div className="flex items-center gap-3">
             <div className={`p-1.5 rounded-lg ${colorClass}`}>
               {icon}
             </div>
-            <span className="font-medium text-slate-200 text-sm">{title}</span>
+            <span className="font-medium text-zinc-200 text-sm">{title}</span>
             {count > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-slate-700 text-xs font-semibold text-slate-300">
+              <span className="px-2 py-0.5 rounded-full bg-zinc-700 text-xs font-semibold text-zinc-300">
                 {count}
               </span>
             )}
           </div>
           {isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-slate-500" />
+            <ChevronDown className="w-4 h-4 text-zinc-500" />
           ) : (
-            <ChevronRight className="w-4 h-4 text-slate-500" />
+            <ChevronRight className="w-4 h-4 text-zinc-500" />
           )}
         </button>
         
         {isExpanded && (
-          <div className="p-4 bg-slate-800/50 border-t border-slate-700">
+          <div className="p-4 bg-zinc-800/50 border-t border-zinc-700">
             {isLoading ? (
               <div className="space-y-2 animate-pulse">
-                <div className="h-3 bg-slate-700 rounded w-full"></div>
-                <div className="h-3 bg-slate-700 rounded w-5/6"></div>
+                <div className="h-3 bg-zinc-700 rounded w-full"></div>
+                <div className="h-3 bg-zinc-700 rounded w-5/6"></div>
               </div>
             ) : count === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-2">Nothing found in this section.</p>
+              <p className="text-sm text-zinc-500 text-center py-2">Nothing found in this section.</p>
             ) : (
               content
             )}
@@ -76,20 +76,20 @@ export const PriorityFilter: React.FC<PriorityFilterProps> = ({ priorities, user
 
   return (
     <div className="w-full">
-      <div className="mb-6 bg-slate-800 border border-slate-700 rounded-xl p-4">
-        <label htmlFor="username" className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+      <div className="mb-6 bg-zinc-800 border border-zinc-700 rounded-xl p-4">
+        <label htmlFor="username" className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">
           Find mentions for user
         </label>
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <User className="h-4 w-4 text-slate-500" />
+            <User className="h-4 w-4 text-zinc-500" />
           </div>
           <input
             type="text"
             id="username"
             value={username}
             onChange={(e) => onUsernameChange(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2 border border-slate-600 rounded-lg bg-slate-900 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+            className="block w-full pl-10 pr-3 py-2 border border-zinc-600 rounded-lg bg-zinc-900 text-sm text-zinc-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
             placeholder="Your name or handle..."
           />
         </div>
@@ -105,7 +105,7 @@ export const PriorityFilter: React.FC<PriorityFilterProps> = ({ priorities, user
             {priorities?.mentions.map((m, i) => (
               <div key={i} className="text-sm">
                 <span className="font-semibold text-blue-400">{m.from}: </span>
-                <span className="text-slate-300">{m.message}</span>
+                <span className="text-zinc-300">{m.message}</span>
               </div>
             ))}
           </div>,
@@ -117,7 +117,7 @@ export const PriorityFilter: React.FC<PriorityFilterProps> = ({ priorities, user
           'Decisions Made',
           <GitMerge className="w-4 h-4" />,
           priorities?.decisions?.length || 0,
-          <ul className="list-disc pl-5 space-y-2 text-sm text-slate-300">
+          <ul className="list-disc pl-5 space-y-2 text-sm text-zinc-300">
             {priorities?.decisions.map((d, i) => <li key={i}>{d}</li>)}
           </ul>,
           'bg-purple-500/10 text-purple-400'
@@ -130,7 +130,7 @@ export const PriorityFilter: React.FC<PriorityFilterProps> = ({ priorities, user
           priorities?.questions?.length || 0,
           <ul className="space-y-3">
             {priorities?.questions.map((q, i) => (
-              <li key={i} className="flex gap-2 text-sm text-slate-300 items-start">
+              <li key={i} className="flex gap-2 text-sm text-zinc-300 items-start">
                 <span className="text-amber-500 font-bold">?</span>
                 <span>{q}</span>
               </li>
@@ -146,8 +146,8 @@ export const PriorityFilter: React.FC<PriorityFilterProps> = ({ priorities, user
           priorities?.deadlines?.length || 0,
           <div className="space-y-3">
             {priorities?.deadlines.map((d, i) => (
-              <div key={i} className="flex justify-between items-center text-sm border-b border-slate-700/50 pb-2 last:border-0 last:pb-0">
-                <span className="text-slate-300">{d.item}</span>
+              <div key={i} className="flex justify-between items-center text-sm border-b border-zinc-700/50 pb-2 last:border-0 last:pb-0">
+                <span className="text-zinc-300">{d.item}</span>
                 <span className="text-red-400 font-medium whitespace-nowrap ml-4">{d.date}</span>
               </div>
             ))}

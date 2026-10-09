@@ -1,151 +1,156 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, FileText, ClipboardPaste, MessageSquare, Loader2, MessageCircle } from 'lucide-react';
+import { ArrowUp, ClipboardPaste, FileText, Loader2, Paperclip, ShieldCheck, Upload, Wand2 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
+import { Logo } from './Layout';
 import { SAMPLE_CHAT } from '../sampleChat';
 
 export interface ChatImportProps {
   onImport: (text: string, fileName?: string) => void;
   isProcessing: boolean;
+  /** Short text under the composer describing where data goes. */
+  privacyNote: string;
 }
 
-/**
- * Component for importing chat logs via drag-and-drop, file select, or pasting text.
- */
-export const ChatImport: React.FC<ChatImportProps> = ({ onImport, isProcessing }) => {
-  const [pasteText, setPasteText] = useState('');
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      const file = acceptedFiles[0];
+/** Welcome screen: centered heading, large composer (paste or drop), and quick-start cards. */
+export const ChatImport: React.FC<ChatImportProps> = ({ onImport, isProcessing, privacyNote }) => {
+  const [text, setText] = useState('');
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  const onDrop = useCallback(
+    (files: File[]) => {
+      setFileError(null);
+      const file = files[0];
+      if (!file) return;
+      if (file.size > MAX_FILE_BYTES) {
+        setFileError('That file is larger than 5 MB. Export a shorter range of the chat.');
+        return;
+      }
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result;
-        if (typeof text === 'string') {
-          onImport(text, file.name);
-        }
-      };
+      reader.onload = (e) => typeof e.target?.result === 'string' && onImport(e.target.result, file.name);
+      reader.onerror = () => setFileError('Could not read that file.');
       reader.readAsText(file);
-    }
-  }, [onImport]);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'text/plain': ['.txt'],
-      'application/json': ['.json'],
-      'text/csv': ['.csv']
-      
     },
+    [onImport],
+  );
+
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+    onDrop,
+    onDropRejected: () => setFileError('Unsupported file. Use a .txt, .json or .csv chat export.'),
+    accept: { 'text/plain': ['.txt'], 'application/json': ['.json'], 'text/csv': ['.csv'] },
     disabled: isProcessing,
-    multiple: false
+    multiple: false,
+    noClick: true,
+    noKeyboard: true,
   });
 
-  const handlePasteSubmit = () => {
-    if (pasteText.trim()) {
-      onImport(pasteText.trim(), 'Pasted Chat');
-      setPasteText('');
+  const submit = () => {
+    if (text.trim() && !isProcessing) {
+      onImport(text.trim(), 'Pasted Chat');
+      setText('');
     }
   };
 
-  const handleClipboardPaste = async () => {
+  const pasteFromClipboard = async () => {
     try {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        onImport(text, 'Clipboard Paste');
-      }
-    } catch (err) {
-      console.error('Failed to read clipboard text: ', err);
+      const t = await navigator.clipboard.readText();
+      if (t.trim()) onImport(t, 'Clipboard Paste');
+      else setFileError('The clipboard is empty.');
+    } catch {
+      setFileError('Clipboard access was blocked. Paste into the box instead.');
     }
   };
+
+  const card =
+    'text-left rounded-xl border border-zinc-800 bg-zinc-800/30 p-4 hover:bg-zinc-800/60 hover:border-zinc-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-orange-500/60 transition-colors';
 
   return (
-    <div className="w-full max-w-3xl mx-auto space-y-6">
-      <div 
-        {...getRootProps()} 
-        className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors cursor-pointer
-          ${isDragActive ? 'border-green-500 bg-green-500/10' : 'border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-600'}
-          ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
-        `}
+    <section aria-labelledby="welcome" className="flex flex-col items-center pt-4 md:pt-10">
+      <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-800/40 px-3 py-1.5 text-xs text-zinc-400">
+        <ShieldCheck className="w-3.5 h-3.5 text-orange-400" aria-hidden="true" />
+        Local-first · you choose where analysis runs
+      </span>
+
+      <Logo className="w-12 h-12 mt-8" />
+      <h2 id="welcome" className="mt-5 text-3xl md:text-4xl font-normal tracking-tight text-zinc-50 text-center">
+        What did you miss?
+      </h2>
+
+      <div
+        {...getRootProps()}
+        className={`mt-8 w-full rounded-2xl border bg-zinc-900 transition-colors ${
+          isDragActive ? 'border-orange-500 bg-orange-500/5' : 'border-zinc-700 focus-within:border-zinc-500'
+        }`}
       >
-        <input {...getInputProps()} />
-        <div className="flex justify-center mb-4 text-slate-400">
-          {isProcessing ? (
-            <Loader2 className="w-12 h-12 animate-spin text-green-500" />
-          ) : (
-            <Upload className="w-12 h-12" />
-          )}
-        </div>
-        <h3 className="text-lg font-semibold text-slate-200 mb-2">
-          {isProcessing ? 'Processing Chat Log...' : isDragActive ? 'Drop your file here' : 'Drag & Drop Chat Export'}
-        </h3>
-        <p className="text-sm text-slate-400 max-w-sm mx-auto mb-6">
-          Support for .txt, .json, .csv files from major messaging platforms. Data is processed locally.
-        </p>
-        
-        {!isProcessing && (
-          <div className="flex flex-wrap justify-center gap-3 mt-4">
-            <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 rounded-full text-xs text-slate-400 border border-slate-700">
-              <MessageCircle className="w-3 h-3 text-green-500" /> WhatsApp
-            </span>
-            <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 rounded-full text-xs text-slate-400 border border-slate-700">
-              <MessageSquare className="w-3 h-3 text-blue-400" /> Telegram
-            </span>
-            <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 rounded-full text-xs text-slate-400 border border-slate-700">
-              <FileText className="w-3 h-3 text-indigo-400" /> Discord
-            </span>
-            <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 rounded-full text-xs text-slate-400 border border-slate-700">
-              <MessageSquare className="w-3 h-3 text-red-400" /> Slack
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="relative flex items-center py-2">
-        <div className="flex-grow border-t border-slate-700"></div>
-        <span className="flex-shrink-0 mx-4 text-slate-500 text-sm">or</span>
-        <div className="flex-grow border-t border-slate-700"></div>
-      </div>
-
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 focus-within:ring-2 focus-within:ring-green-500/50 transition-all">
-        <div className="flex justify-between items-center mb-3">
-          <label htmlFor="paste-area" className="text-sm font-medium text-slate-300">
-            Paste Raw Text
-          </label>
-          <button
-            onClick={handleClipboardPaste}
-            disabled={isProcessing}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1 bg-slate-900 rounded border border-slate-700 hover:border-slate-600 disabled:opacity-50"
-          >
-            <ClipboardPaste className="w-3.5 h-3.5" />
-            From Clipboard
-          </button>
-        </div>
+        <input {...getInputProps()} aria-label="Upload chat export" />
+        <label htmlFor="chat-input" className="sr-only">Paste a chat conversation</label>
         <textarea
-          id="paste-area"
-          value={pasteText}
-          onChange={(e) => setPasteText(e.target.value)}
+          id="chat-input"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit();
+          }}
           disabled={isProcessing}
-          placeholder="Paste conversation text here (e.g., [10:24 AM] Alice: Hello team...)"
-          className="w-full h-32 bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-slate-300 placeholder-slate-600 resize-none focus:outline-none focus:border-green-500/50 disabled:opacity-50"
+          placeholder={isDragActive ? 'Drop the file to analyze it…' : 'Paste a chat export here, or drop a file…'}
+          className="w-full h-32 resize-none bg-transparent px-4 pt-4 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none disabled:opacity-60"
         />
-        <div className="mt-3 flex justify-end gap-3">
+        <div className="flex items-center justify-between px-3 pb-3">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={open}
+              disabled={isProcessing}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-orange-500/60"
+            >
+              <Paperclip className="w-3.5 h-3.5" aria-hidden="true" /> Attach file
+            </button>
+            <button
+              type="button"
+              onClick={pasteFromClipboard}
+              disabled={isProcessing}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-orange-500/60"
+            >
+              <ClipboardPaste className="w-3.5 h-3.5" aria-hidden="true" /> Clipboard
+            </button>
+          </div>
           <button
             type="button"
-            onClick={() => onImport(SAMPLE_CHAT, 'Sample Chat')}
-            disabled={isProcessing}
-            className="px-4 py-2 border border-slate-600 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            onClick={submit}
+            disabled={!text.trim() || isProcessing}
+            aria-label="Analyze chat"
+            className="grid place-items-center w-9 h-9 rounded-full bg-orange-500 text-zinc-950 hover:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-orange-300"
           >
-            Try sample chat
-          </button>
-          <button
-            onClick={handlePasteSubmit}
-            disabled={!pasteText.trim() || isProcessing}
-            className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            Process Text
+            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
           </button>
         </div>
+        <div className="border-t border-zinc-800 px-4 py-2.5 text-xs text-zinc-500 rounded-b-2xl bg-zinc-900/60">{privacyNote}</div>
       </div>
-    </div>
+
+      {fileError && (
+        <p role="alert" className="mt-3 text-sm text-red-300">
+          {fileError}
+        </p>
+      )}
+
+      <div className="mt-6 w-full grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <button className={card} disabled={isProcessing} onClick={() => onImport(SAMPLE_CHAT, 'Sample Chat')}>
+          <Wand2 className="w-4 h-4 text-orange-400" aria-hidden="true" />
+          <span className="mt-3 block text-sm font-medium text-zinc-100">Try a sample chat</span>
+          <span className="mt-1 block text-xs text-zinc-400">See a summary, action items and priorities in seconds.</span>
+        </button>
+        <button className={card} disabled={isProcessing} onClick={open}>
+          <Upload className="w-4 h-4 text-orange-400" aria-hidden="true" />
+          <span className="mt-3 block text-sm font-medium text-zinc-100">Upload an export</span>
+          <span className="mt-1 block text-xs text-zinc-400">WhatsApp, Telegram, Slack, Discord (.txt, .json, .csv).</span>
+        </button>
+        <button className={card} disabled={isProcessing} onClick={pasteFromClipboard}>
+          <FileText className="w-4 h-4 text-orange-400" aria-hidden="true" />
+          <span className="mt-3 block text-sm font-medium text-zinc-100">Paste from clipboard</span>
+          <span className="mt-1 block text-xs text-zinc-400">Copy a conversation, then catch up in one click.</span>
+        </button>
+      </div>
+    </section>
   );
 };

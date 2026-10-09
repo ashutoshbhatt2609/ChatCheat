@@ -18,11 +18,11 @@ export const ActionItems: React.FC<ActionItemsProps> = ({ items, isLoading }) =>
     return (
       <div className="space-y-3 w-full">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="bg-slate-800 rounded-xl border border-slate-700 p-4 animate-pulse">
-            <div className="h-4 w-3/4 bg-slate-700 rounded mb-3"></div>
+          <div key={i} className="bg-zinc-800 rounded-xl border border-zinc-700 p-4 animate-pulse">
+            <div className="h-4 w-3/4 bg-zinc-700 rounded mb-3"></div>
             <div className="flex gap-2">
-              <div className="h-5 w-20 bg-slate-700 rounded-full"></div>
-              <div className="h-5 w-24 bg-slate-700 rounded-full"></div>
+              <div className="h-5 w-20 bg-zinc-700 rounded-full"></div>
+              <div className="h-5 w-24 bg-zinc-700 rounded-full"></div>
             </div>
           </div>
         ))}
@@ -32,11 +32,11 @@ export const ActionItems: React.FC<ActionItemsProps> = ({ items, isLoading }) =>
 
   if (!items || items.length === 0) {
     return (
-      <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 border-dashed p-8 text-center w-full">
-        <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-slate-900 mb-3">
-          <ListTodo className="w-5 h-5 text-slate-500" />
+      <div className="bg-zinc-800/50 rounded-xl border border-zinc-700/50 border-dashed p-8 text-center w-full">
+        <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-zinc-900 mb-3">
+          <ListTodo className="w-5 h-5 text-zinc-500" />
         </div>
-        <p className="text-sm text-slate-400">No action items found in this conversation.</p>
+        <p className="text-sm text-zinc-400">No action items found in this conversation.</p>
       </div>
     );
   }
@@ -59,9 +59,9 @@ export const ActionItems: React.FC<ActionItemsProps> = ({ items, isLoading }) =>
         const conf = urgencyConfig[item.urgency];
         
         return (
-          <div key={idx} className="bg-slate-800 rounded-xl border border-slate-700 p-4 hover:border-slate-600 transition-colors group">
+          <div key={idx} className="bg-zinc-800 rounded-xl border border-zinc-700 p-4 hover:border-zinc-600 transition-colors group">
             <div className="flex items-start justify-between gap-4">
-              <p className="text-sm font-medium text-slate-200 leading-snug flex-1">
+              <p className="text-sm font-medium text-zinc-200 leading-snug flex-1">
                 {item.task}
               </p>
               <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider whitespace-nowrap ${conf.bg} ${conf.color} border ${conf.border}`}>
@@ -71,13 +71,13 @@ export const ActionItems: React.FC<ActionItemsProps> = ({ items, isLoading }) =>
             </div>
             
             <div className="flex flex-wrap items-center gap-3 mt-3">
-              <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900/50 px-2.5 py-1 rounded-full border border-slate-700/50">
+              <div className="flex items-center gap-1.5 text-xs text-zinc-400 bg-zinc-900/50 px-2.5 py-1 rounded-full border border-zinc-700/50">
                 <User className="w-3.5 h-3.5" />
-                <span className="font-medium text-slate-300">{item.assignee}</span>
+                <span className="font-medium text-zinc-300">{item.assignee}</span>
               </div>
               
               {item.deadline && (
-                <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900/50 px-2.5 py-1 rounded-full border border-slate-700/50">
+                <div className="flex items-center gap-1.5 text-xs text-zinc-400 bg-zinc-900/50 px-2.5 py-1 rounded-full border border-zinc-700/50">
                   <Calendar className="w-3.5 h-3.5" />
                   <span>{item.deadline}</span>
                 </div>

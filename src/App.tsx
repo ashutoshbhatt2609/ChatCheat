@@ -1,19 +1,26 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { LogOut, Trash2, Wand2 } from 'lucide-react';
 import { Layout } from './components/Layout';
 import { ChatImport } from './components/ChatImport';
-import { ModelLoader } from './components/ModelLoader';
+import { EnginePicker, type Engine, type LoadingProgress } from './components/EnginePicker';
+import { PrivacyBadge } from './components/PrivacyBadge';
 import { SummaryView } from './components/SummaryView';
 import { ActionItems } from './components/ActionItems';
 import { PriorityFilter } from './components/PriorityFilter';
 import { ConversationHistory } from './components/ConversationHistory';
+import { GoogleButton } from './auth/GoogleButton';
+import { useAuth } from './auth/useAuth';
 import { parseChat } from './parsers';
-import { aiEngine, type ModelId, type LoadingProgress } from './ai/engine';
+import { aiEngine, type ModelId } from './ai/engine';
 import { buildSummaryMessages, buildActionItemMessages, buildPriorityMessages } from './ai/prompts';
 import { db, type StoredConversation } from './db';
-import type { ParsedConversation } from './parsers/types';
+import type { ParsedConversation, Message } from './parsers/types';
 import { heuristicSummary, heuristicActionItems, heuristicPriorities } from './ai/heuristics';
-import { CloudToggle } from './components/CloudToggle';
+import { SAMPLE_CHAT } from './sampleChat';
 import { cloudComplete, isCloudAvailable } from './ai/cloud';
+import {
+  deleteAllCloud, deleteCloud, fetchCloud, listCloud, pushCloud, type CloudListItem,
+} from './cloudSync';
 import {
   parseSummary,
   parseActionItems,
@@ -26,23 +33,26 @@ import {
 
 /**
  * Root application component.
- * Manages the full lifecycle: model loading → chat import → AI analysis → results display.
+ * Lifecycle: choose engine → import chat → analysis → results (+ optional account sync).
  */
 export default function App() {
-  // --- Model State ---
-  const [modelProgress, setModelProgress] = useState<LoadingProgress>({
-    stage: 'downloading',
-    progress: 0,
-    message: 'Select a model to get started',
-  });
-  const [currentModel, setCurrentModel] = useState<string | null>(null);
+  const auth = useAuth();
+  const { config, user } = auth;
+  const syncEnabled = Boolean(user) && config.cloudSync;
 
-  // --- Cloud AI (opt-in; sends chat text to Gemini via /api/analyze) ---
-  const [cloudAvailable, setCloudAvailable] = useState(false);
-  const [cloudEnabled, setCloudEnabled] = useState(false);
+  // --- Engine: rule-based (default, on-device) | Gemini cloud | on-device WebLLM model ---
+  const [engine, setEngine] = useState<Engine>('rules');
+  const [localModel, setLocalModel] = useState<string | null>(null);
+  const [modelProgress, setModelProgress] = useState<LoadingProgress>({
+    stage: 'ready', // idle until the user picks an on-device model
+    progress: 0,
+    message: '',
+  });
+  const [cloudUsable, setCloudUsable] = useState(false);
 
   // --- Conversation State ---
   const [conversations, setConversations] = useState<StoredConversation[]>([]);
+  const [cloudList, setCloudList] = useState<CloudListItem[]>([]);
   const [activeConversation, setActiveConversation] = useState<ParsedConversation | null>(null);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
 
@@ -59,16 +69,43 @@ export default function App() {
   const [isExtractingActions, setIsExtractingActions] = useState(false);
   const [isAnalyzingPriorities, setIsAnalyzingPriorities] = useState(false);
 
-  // --- Load conversation history from IndexedDB on mount ---
+  const cloudEnabled = engine === 'cloud';
+  const useRules = () => engine === 'rules' || (engine === 'local' && !aiEngine.isReady());
+
+  // --- Local history on mount ---
   useEffect(() => {
     db.getAllConversations().then(setConversations).catch(console.error);
-    isCloudAvailable().then(setCloudAvailable);
   }, []);
 
-  // --- Model Loading ---
-  const handleSelectModel = useCallback(async (modelId: string) => {
+  // --- Cloud AI availability follows sign-in state ---
+  useEffect(() => {
+    isCloudAvailable().then((ok) => {
+      setCloudUsable(ok);
+      if (!ok) setEngine((e) => (e === 'cloud' ? 'rules' : e));
+    });
+  }, [user]);
+
+  // --- Account history follows sign-in state ---
+  const refreshCloudList = useCallback(async () => {
+    if (!syncEnabled) {
+      setCloudList([]);
+      return;
+    }
     try {
-      setCurrentModel(modelId);
+      setCloudList(await listCloud());
+    } catch {
+      setNotice({ kind: 'error', text: 'Could not load your synced chats. Showing this device only.' });
+    }
+  }, [syncEnabled]);
+  useEffect(() => {
+    refreshCloudList();
+  }, [refreshCloudList]);
+
+  // --- On-device model loading ---
+  const handleSelectLocal = useCallback(async (modelId: string) => {
+    setLocalModel(modelId);
+    setEngine('local');
+    try {
       await aiEngine.loadModel(modelId as ModelId, setModelProgress);
     } catch (err) {
       console.error('Failed to load model:', err);
@@ -77,6 +114,7 @@ export default function App() {
         progress: 0,
         message: `Failed to load model: ${err instanceof Error ? err.message : 'Unknown error'}`,
       });
+      setEngine('rules');
     }
   }, []);
 
@@ -102,35 +140,36 @@ export default function App() {
     [formatChatForAI],
   );
 
-  // --- Run AI Analysis ---
+  // --- Run analysis; returns the final results so callers can sync them ---
   const runAnalysis = useCallback(
-    async (conv: ParsedConversation) => {
-      if (!cloudEnabled && !aiEngine.isReady()) {
+    async (conv: ParsedConversation): Promise<{ s: SummaryData | null; a: ActionItem[] }> => {
+      if (useRules()) {
         const s = heuristicSummary(conv);
         const a = heuristicActionItems(conv);
         setSummary(s);
         setActionItems(a);
         await db.saveSummary(conv.id, s);
         await db.saveActionItems(conv.id, a);
-        setNotice({ kind: 'info', text: 'Quick analysis (rule-based, on-device). Enable cloud AI or load a model for AI-written summaries.' });
-        return;
+        setNotice({ kind: 'info', text: 'Quick analysis (rule-based, on-device). Pick Gemini or an on-device model in the top bar for AI-written summaries.' });
+        return { s, a };
       }
 
       const chatText = prepareChatText(conv);
+      let finalSummary: SummaryData | null = null;
+      let finalActions: ActionItem[] = [];
 
-      // Run summarization
       setIsSummarizing(true);
       try {
-        const summaryResult = cloudEnabled
+        const raw = cloudEnabled
           ? await cloudComplete('summary', chatText)
           : await aiEngine.complete(buildSummaryMessages(chatText));
-        const parsed: SummaryData = parseSummary(summaryResult);
-        setSummary(parsed);
-        await db.saveSummary(conv.id, parsed);
+        finalSummary = parseSummary(raw);
+        setSummary(finalSummary);
+        await db.saveSummary(conv.id, finalSummary);
       } catch (err) {
         console.error('Summary failed:', err);
-        const s = heuristicSummary(conv);
-        setSummary(s);
+        finalSummary = heuristicSummary(conv);
+        setSummary(finalSummary);
         setNotice({
           kind: 'error',
           text: (cloudEnabled && err instanceof Error ? err.message + ' ' : 'The AI returned an unreadable summary. ') + 'Showing a quick rule-based analysis instead.',
@@ -138,42 +177,42 @@ export default function App() {
       }
       setIsSummarizing(false);
 
-      // Run action item extraction
       setIsExtractingActions(true);
       try {
-        const actionResult = cloudEnabled
+        const raw = cloudEnabled
           ? await cloudComplete('actions', chatText)
           : await aiEngine.complete(buildActionItemMessages(chatText));
-        const parsed: ActionItem[] = parseActionItems(actionResult);
-        setActionItems(parsed);
-        await db.saveActionItems(conv.id, parsed);
+        finalActions = parseActionItems(raw);
+        setActionItems(finalActions);
+        await db.saveActionItems(conv.id, finalActions);
       } catch (err) {
         console.error('Action items failed:', err);
-        setActionItems(heuristicActionItems(conv));
+        finalActions = heuristicActionItems(conv);
+        setActionItems(finalActions);
         setNotice({ kind: 'error', text: 'AI action-item extraction failed; showing rule-based results.' });
       }
       setIsExtractingActions(false);
+      return { s: finalSummary, a: finalActions };
     },
-    [prepareChatText, cloudEnabled],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [prepareChatText, engine],
   );
 
-  // --- Run Priority Analysis (triggered when username changes) ---
+  // --- Priority analysis (triggered when username changes) ---
   const runPriorityAnalysis = useCallback(
     async (conv: ParsedConversation, name: string) => {
       if (!name.trim()) return;
-      if (!cloudEnabled && !aiEngine.isReady()) {
+      if (useRules()) {
         setPriorities(heuristicPriorities(conv, name));
         return;
       }
-
       setIsAnalyzingPriorities(true);
       try {
         const chatText = prepareChatText(conv);
-        const result = cloudEnabled
+        const raw = cloudEnabled
           ? await cloudComplete('priorities', chatText, name)
           : await aiEngine.complete(buildPriorityMessages(chatText, name));
-        const parsed: PriorityData = parsePriorities(result);
-        setPriorities(parsed);
+        setPriorities(parsePriorities(raw));
       } catch (err) {
         console.error('Priority analysis failed:', err);
         setPriorities(heuristicPriorities(conv, name));
@@ -181,10 +220,25 @@ export default function App() {
       }
       setIsAnalyzingPriorities(false);
     },
-    [prepareChatText, cloudEnabled],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [prepareChatText, engine],
   );
 
-  // --- Chat Import Handler ---
+  // --- Push one conversation + results to the user's account (only when signed in) ---
+  const syncConversation = useCallback(
+    async (conv: ParsedConversation, s: SummaryData | null, a: ActionItem[]) => {
+      if (!syncEnabled) return;
+      try {
+        await pushCloud(conv, s, a);
+        await refreshCloudList();
+      } catch {
+        setNotice({ kind: 'error', text: 'Saved on this device, but syncing to your account failed.' });
+      }
+    },
+    [syncEnabled, refreshCloudList],
+  );
+
+  // --- Chat import ---
   const handleImport = useCallback(
     async (text: string, fileName?: string) => {
       setIsProcessing(true);
@@ -195,7 +249,6 @@ export default function App() {
 
       try {
         const result = parseChat(text, fileName);
-
         if (!result.success || !result.conversation) {
           setNotice({ kind: 'error', text: result.error || 'Could not read that chat export.' });
           setIsProcessing(false);
@@ -205,39 +258,68 @@ export default function App() {
         const conv: ParsedConversation = { ...result.conversation, id: crypto.randomUUID() };
         setActiveConversation(conv);
 
-        // Save to IndexedDB
         const convId = await db.saveConversation(conv);
         setActiveConvId(convId);
-
-        // Refresh conversation list
-        const allConvs = await db.getAllConversations();
-        setConversations(allConvs);
-
+        setConversations(await db.getAllConversations());
         setIsProcessing(false);
 
-        await runAnalysis(conv);
+        const { s, a } = await runAnalysis(conv);
+        await syncConversation(conv, s, a);
       } catch (err) {
         console.error('Import failed:', err);
         setNotice({ kind: 'error', text: 'Import failed. Check the file format and try again.' });
         setIsProcessing(false);
       }
     },
-    [runAnalysis],
+    [runAnalysis, syncConversation],
   );
 
-  // --- Load a past conversation ---
+  const resetView = useCallback(() => {
+    setActiveConversation(null);
+    setActiveConvId(null);
+    setSummary(null);
+    setActionItems([]);
+    setPriorities(null);
+    setNotice(null);
+  }, []);
+
+  // --- Open a past conversation (downloads it from the account first if it only exists there) ---
   const handleSelectConversation = useCallback(
     async (id: string) => {
       try {
-        const conv = await db.getConversation(id);
+        let conv = await db.getConversation(id);
+        if (!conv && syncEnabled) {
+          const c = await fetchCloud(id);
+          const messages: Message[] = c.messages.map((m, i) => ({
+            id: `${id}:${i}`,
+            sender: m.sender,
+            content: m.content,
+            timestamp: new Date(m.timestamp),
+            platform: c.platform,
+          }));
+          const restored: ParsedConversation = {
+            id,
+            name: c.name,
+            platform: c.platform,
+            messages,
+            participants: [...new Set(messages.map((m) => m.sender))],
+            startDate: new Date(c.startDate),
+            endDate: new Date(c.endDate),
+            messageCount: messages.length,
+          };
+          await db.saveConversation(restored);
+          if (c.summary) await db.saveSummary(id, c.summary as SummaryData);
+          if (Array.isArray(c.actions)) await db.saveActionItems(id, c.actions as ActionItem[]);
+          setConversations(await db.getAllConversations());
+          conv = await db.getConversation(id);
+        }
         if (!conv) return;
 
         setActiveConvId(id);
-
-        // Reconstruct ParsedConversation from stored data
+        setNotice(null);
         const messages = (await db.getMessages(id)).map(({ conversationId: _c, ...m }) => m);
-        const parsed: ParsedConversation = {
-          id: conv.id!,
+        setActiveConversation({
+          id: conv.id,
           name: conv.name,
           platform: conv.platform,
           messages,
@@ -245,162 +327,191 @@ export default function App() {
           startDate: conv.startDate,
           endDate: conv.endDate,
           messageCount: conv.messageCount,
-        };
-        setActiveConversation(parsed);
-
-        // Load cached results
-        const cachedSummary = await db.getSummary(id);
-        if (cachedSummary) setSummary(cachedSummary);
-        else setSummary(null);
-
-        const cachedActions = await db.getActionItems(id);
-        if (cachedActions.length > 0) setActionItems(cachedActions);
-        else setActionItems([]);
-
+        });
+        setSummary((await db.getSummary(id)) ?? null);
+        setActionItems(await db.getActionItems(id));
         setPriorities(null);
       } catch (err) {
         console.error('Failed to load conversation:', err);
+        setNotice({ kind: 'error', text: 'Could not open that conversation.' });
       }
     },
-    [],
+    [syncEnabled],
   );
 
-  // --- Delete a conversation ---
-  const handleDeleteConversation = useCallback(async (id: string) => {
-    try {
-      await db.deleteConversation(id);
-      const allConvs = await db.getAllConversations();
-      setConversations(allConvs);
-
-      if (id === activeConvId) {
-        setActiveConvId(null);
-        setActiveConversation(null);
-        setSummary(null);
-        setActionItems([]);
-        setPriorities(null);
+  // --- Delete one conversation (device + account) ---
+  const handleDeleteConversation = useCallback(
+    async (id: string) => {
+      try {
+        await db.deleteConversation(id);
+        if (syncEnabled) await deleteCloud(id).then(refreshCloudList);
+        setConversations(await db.getAllConversations());
+        if (id === activeConvId) resetView();
+      } catch (err) {
+        console.error('Failed to delete conversation:', err);
       }
-    } catch (err) {
-      console.error('Failed to delete conversation:', err);
-    }
-  }, [activeConvId]);
+    },
+    [activeConvId, syncEnabled, refreshCloudList, resetView],
+  );
 
-  // --- Username change for priority analysis ---
+  // --- Delete everything (device + account) ---
+  const handleClearAll = useCallback(async () => {
+    const where = syncEnabled ? 'this device and your account' : 'this device';
+    if (!window.confirm(`Delete all saved conversations and results from ${where}?`)) return;
+    await db.clearAll();
+    if (syncEnabled) await deleteAllCloud().catch(() => undefined);
+    setConversations([]);
+    setCloudList([]);
+    resetView();
+  }, [syncEnabled, resetView]);
+
   const handleUsernameChange = useCallback(
     (name: string) => {
       setUsername(name);
-      if (activeConversation && name.trim()) {
-        runPriorityAnalysis(activeConversation, name);
-      }
+      if (activeConversation && name.trim()) runPriorityAnalysis(activeConversation, name);
     },
     [activeConversation, runPriorityAnalysis],
   );
 
-  // --- Sidebar ---
-  const handleClearAll = useCallback(async () => {
-    if (!window.confirm('Delete all saved conversations and results from this device?')) return;
-    await db.clearAll();
-    setConversations([]);
-    setActiveConvId(null);
-    setActiveConversation(null);
-    setSummary(null);
-    setActionItems([]);
-    setPriorities(null);
-  }, []);
+  // --- History list = this device + account-only chats ---
+  const historyItems = useMemo(() => {
+    const cloudIds = new Set(cloudList.map((c) => c.id));
+    const local = conversations.map((c) => ({
+      id: c.id,
+      name: c.name,
+      platform: c.platform,
+      messageCount: c.messageCount,
+      createdAt: new Date(c.createdAt),
+      inCloud: cloudIds.has(c.id),
+    }));
+    const localIds = new Set(local.map((c) => c.id));
+    const remote = cloudList
+      .filter((c) => !localIds.has(c.id))
+      .map((c) => ({
+        id: c.id, name: c.name, platform: c.platform, messageCount: c.messageCount,
+        createdAt: new Date(c.createdAt), inCloud: true,
+      }));
+    return [...local, ...remote].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }, [conversations, cloudList]);
 
-  const sidebar = (
-    <>
-    <ConversationHistory
-      conversations={conversations.map((c) => ({
-        id: c.id!,
-        name: c.name,
-        platform: c.platform,
-        messageCount: c.messageCount,
-        createdAt: new Date(c.createdAt),
-      }))}
-      activeId={activeConvId}
-      onSelect={handleSelectConversation}
-      onDelete={handleDeleteConversation}
-    />
-    {conversations.length > 0 && (
-      <button
-        type="button"
-        onClick={handleClearAll}
-        className="mx-3 mb-3 w-[calc(100%-1.5rem)] rounded-lg border border-red-500/40 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500/50"
-      >
-        Delete all my data
-      </button>
-    )}
-    </>
+  const privacyNote =
+    engine === 'cloud'
+      ? 'Cloud AI is on: chat text is sent to Google Gemini for analysis.'
+      : syncEnabled
+        ? 'Analysis runs on this device. Your chats and results sync to your signed-in account.'
+        : 'Analysis runs on this device. Nothing is uploaded.';
+
+  const nav = (
+    <button
+      onClick={() => handleImport(SAMPLE_CHAT, 'Sample Chat')}
+      disabled={isProcessing}
+      className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-orange-500/60"
+    >
+      <Wand2 className="w-4 h-4 text-zinc-500" aria-hidden="true" /> Try a sample chat
+    </button>
+  );
+
+  const account = (
+    <div className="space-y-2">
+      {config.googleClientId &&
+        (user ? (
+          <div className="flex items-center gap-2.5 rounded-xl bg-zinc-800/60 px-2.5 py-2">
+            {user.picture ? (
+              <img src={user.picture} alt="" referrerPolicy="no-referrer" className="w-8 h-8 rounded-full" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-orange-500 text-zinc-950 grid place-items-center text-sm font-semibold">
+                {(user.name || user.email).charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium truncate">{user.name}</p>
+              <p className="text-[11px] text-zinc-500 truncate">{user.email}</p>
+            </div>
+            <button
+              onClick={auth.signOut}
+              aria-label="Sign out"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-orange-500/60"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <div>
+            <GoogleButton clientId={config.googleClientId} onCredential={auth.signInWithCredential} />
+            <p className="mt-2 text-[11px] leading-snug text-zinc-500">
+              Sign in to sync chats across devices{config.cloudAi ? ' and use cloud AI' : ''}. Optional.
+            </p>
+            {auth.error && <p role="alert" className="mt-1 text-xs text-red-300">{auth.error}</p>}
+          </div>
+        ))}
+      {(conversations.length > 0 || cloudList.length > 0) && (
+        <button
+          type="button"
+          onClick={handleClearAll}
+          className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-zinc-400 hover:text-red-300 hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+        >
+          <Trash2 className="w-4 h-4" aria-hidden="true" /> Delete all my data
+        </button>
+      )}
+    </div>
   );
 
   return (
-    <Layout sidebar={sidebar}>
-      {cloudAvailable && <CloudToggle enabled={cloudEnabled} onChange={setCloudEnabled} />}
-
-      {/* Local model loader (optional, fully on-device) */}
-      <ModelLoader
-        progress={modelProgress}
-        onSelectModel={handleSelectModel}
-        currentModel={currentModel}
-      />
-
+    <Layout
+      onNewChat={resetView}
+      nav={nav}
+      history={
+        <ConversationHistory
+          conversations={historyItems}
+          activeId={activeConvId}
+          onSelect={handleSelectConversation}
+          onDelete={handleDeleteConversation}
+        />
+      }
+      account={account}
+      topLeft={
+        <EnginePicker
+          engine={engine}
+          localModel={localModel}
+          progress={modelProgress}
+          cloudConfigured={config.cloudAi}
+          cloudUsable={cloudUsable}
+          onSelectRules={() => setEngine('rules')}
+          onSelectCloud={() => setEngine('cloud')}
+          onSelectLocal={handleSelectLocal}
+        />
+      }
+      topRight={<PrivacyBadge cloudAi={engine === 'cloud'} synced={syncEnabled} />}
+    >
       {notice && (
         <div
           role={notice.kind === 'error' ? 'alert' : 'status'}
-          className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
+          className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
             notice.kind === 'error'
               ? 'border-red-500/40 bg-red-500/10 text-red-200'
-              : 'border-slate-600 bg-slate-800 text-slate-200'
+              : 'border-zinc-700 bg-zinc-800/60 text-zinc-300'
           }`}
         >
           {notice.text}
         </div>
       )}
 
-      {/* Chat Import */}
       {!activeConversation && (
-        <div className="mt-6">
-          <ChatImport onImport={handleImport} isProcessing={isProcessing} />
-        </div>
+        <ChatImport onImport={handleImport} isProcessing={isProcessing} privacyNote={privacyNote} />
       )}
 
-      {/* Results */}
       {activeConversation && (
-        <div className="mt-6 space-y-6 animate-fade-in">
-          {/* Conversation Header */}
-          <div className="card flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-100">
-                {activeConversation.name}
-              </h2>
-              <p className="text-sm text-gray-400 mt-1">
-                {activeConversation.messageCount} messages ·{' '}
-                {activeConversation.participants.length} participants ·{' '}
-                <span className="capitalize">{activeConversation.platform}</span>
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setActiveConversation(null);
-                setActiveConvId(null);
-                setSummary(null);
-                setActionItems([]);
-                setPriorities(null);
-              }}
-              className="btn-secondary text-sm"
-              aria-label="Analyze another conversation"
-            >
-              New Chat
-            </button>
+        <div className="space-y-5 animate-fade-in">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-800/30 p-5">
+            <h2 className="text-xl font-semibold text-zinc-50">{activeConversation.name}</h2>
+            <p className="text-sm text-zinc-400 mt-1">
+              {activeConversation.messageCount} messages · {activeConversation.participants.length} participants ·{' '}
+              <span className="capitalize">{activeConversation.platform}</span>
+            </p>
           </div>
 
-          {/* Summary */}
           <SummaryView summary={summary} isLoading={isSummarizing} />
-
-          {/* Action Items */}
           <ActionItems items={actionItems} isLoading={isExtractingActions} />
-
-          {/* Priority Filter */}
           <PriorityFilter
             priorities={priorities}
             username={username}
