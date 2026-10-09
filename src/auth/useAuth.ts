@@ -12,7 +12,7 @@ export interface AppConfig {
   googleClientId: string | null;
   cloudSync: boolean;
   cloudAi: boolean;
-  /** Human name of the configured cloud provider, e.g. "DeepSeek (free)". */
+  /** Human name of the configured cloud provider, e.g. "OpenRouter". */
   cloudLabel: string | null;
 }
 

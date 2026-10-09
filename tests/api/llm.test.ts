@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  pickProvider, stripReasoning, rankFreeDeepseek, freeDeepseekModels, chatCompletion, firstWorking,
+  pickProvider, stripReasoning, rankFreeModels, freeModels, chatCompletion, firstWorking,
   UpstreamError, upstreamMessage, resetModelCacheForTests,
 } from '../../api/_lib/llm';
 import { runProvider } from '../../api/analyze';
@@ -31,21 +31,43 @@ describe('reasoning output', () => {
 });
 
 describe('free model discovery', () => {
-  const models = [
-    { id: 'deepseek/deepseek-r1:free', pricing: { prompt: '0', completion: '0' } },
-    { id: 'deepseek/deepseek-chat-v3.1:free', pricing: { prompt: '0', completion: '0' } },
+  const free = { prompt: '0', completion: '0' };
+  const text = { output_modalities: ['text'] };
+  const withDeepseek = [
+    { id: 'deepseek/deepseek-r1:free', pricing: free },
+    { id: 'deepseek/deepseek-chat-v3.1:free', pricing: free },
     { id: 'deepseek/deepseek-chat', pricing: { prompt: '0.0000003', completion: '0.000001' } },
-    { id: 'meta/llama:free', pricing: { prompt: '0', completion: '0' } },
+    { id: 'google/gemma-4-31b-it:free', pricing: free, architecture: text },
+    { id: 'google/lyria-3-clip-preview', pricing: free, architecture: { output_modalities: ['audio'] } },
+    { id: 'nvidia/nemotron-3.5-content-safety:free', pricing: free },
+    { id: 'openrouter/free', pricing: free },
   ];
-  it('keeps only free DeepSeek models, non-reasoning first', () => {
-    expect(rankFreeDeepseek(models)).toEqual(['deepseek/deepseek-chat-v3.1:free', 'deepseek/deepseek-r1:free']);
+  it('ranks free DeepSeek first when one is listed, skips paid / media / safety models, router last', () => {
+    expect(rankFreeModels(withDeepseek)).toEqual([
+      'deepseek/deepseek-chat-v3.1:free',
+      'google/gemma-4-31b-it:free',
+      'deepseek/deepseek-r1:free',
+      'openrouter/free',
+    ]);
   });
-  it('falls back to a static list when discovery fails, and caches success', async () => {
+  it('REGRESSION: with no free DeepSeek at all (the real catalogue today) it still returns usable free models', () => {
+    const noDeepseek = [
+      { id: 'deepseek/deepseek-v4-flash', pricing: { prompt: '0.0000000131', completion: '0.00000003' } },
+      { id: 'nvidia/nemotron-3-super-120b-a12b:free', pricing: free, architecture: text },
+      { id: 'google/gemma-4-26b-a4b-it:free', pricing: free, architecture: text },
+      { id: 'liquid/lfm-2.5-2.6b:free', pricing: free, architecture: text },
+    ];
+    const ids = rankFreeModels(noDeepseek);
+    expect(ids).not.toContain('deepseek/deepseek-v4-flash');
+    expect(ids[0]).toMatch(/gemma|nemotron/);
+    expect(ids[ids.length - 1]).toBe('openrouter/free');
+  });
+  it('falls back to the router alone when discovery fails, and caches success', async () => {
     const bad = vi.fn().mockRejectedValue(new Error('offline'));
-    expect((await freeDeepseekModels(bad as never)).length).toBeGreaterThan(0);
-    const good = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: models }) });
-    expect((await freeDeepseekModels(good as never)).length).toBe(2);
-    await freeDeepseekModels(good as never);
+    expect(await freeModels(bad as never)).toEqual(['openrouter/free']);
+    const good = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: withDeepseek }) });
+    expect((await freeModels(good as never)).length).toBe(4);
+    await freeModels(good as never);
     expect(good).toHaveBeenCalledTimes(1);
   });
 });
@@ -87,7 +109,7 @@ describe('firstWorking', () => {
 });
 
 describe('runProvider', () => {
-  it('openrouter: discovers a free model, falls back on 429, and sends the prompt server-side', async () => {
+  it('openrouter: discovers free models, falls back on 429, and sends the prompt server-side', async () => {
     const f = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.includes('/models')) {
         return { ok: true, json: async () => ({ data: [
@@ -120,9 +142,8 @@ describe('runProvider', () => {
 });
 
 describe('upstreamMessage', () => {
-  it('covers no-balance and no-free-model without leaking details', () => {
+  it('covers no-balance without leaking details', () => {
     expect(upstreamMessage(new UpstreamError(402))).toMatch(/balance/);
-    expect(upstreamMessage(new Error('no free model'))).toMatch(/free DeepSeek/);
-    expect(upstreamMessage(new Error('Bearer sk-secret'))).not.toMatch(/sk-/);
+        expect(upstreamMessage(new Error('Bearer sk-secret'))).not.toMatch(/sk-/);
   });
 });

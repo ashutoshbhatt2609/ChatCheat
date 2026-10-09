@@ -19,7 +19,7 @@ and the messages that mention **you**. Local-first by default; cloud AI and acco
 |--------|---------|-------|----------------------|
 | **Quick analysis** (default) | Good for decisions, deadlines, mentions | Nothing | Stays in your browser |
 | **On-device model** (WebLLM: Phi-3.5 Mini or Qwen2.5 1.5B) | AI-written | WebGPU browser + 1.2–2.2 GB one-time download | Stays in your browser |
-| **Cloud AI** (free DeepSeek via OpenRouter, or DeepSeek / Gemini with your own key) | Best | Sign in with Google + one AI key on the server | Chat text is sent to that provider through this app's server |
+| **Cloud AI** (free models via OpenRouter, or DeepSeek / Gemini with your own key) | Best | Sign in with Google + one AI key on the server | Chat text is sent to that provider through this app's server |
 
 If an AI engine fails, the app falls back to Quick analysis and tells you why. The top-right pill always shows where data goes right now.
 
@@ -34,7 +34,7 @@ Browser (React + Vite + Tailwind)
  └─ /api  (Vercel serverless functions, only when configured)
       ├─ auth.ts     Google ID-token verification → HttpOnly session cookie
       ├─ data.ts     per-user chat sync  ──────────► Turso (libSQL)
-      └─ analyze.ts  cloud LLM proxy: DeepSeek (free via OpenRouter) / DeepSeek / Gemini (key stays server-side, sign-in required)
+      └─ analyze.ts  cloud LLM proxy: OpenRouter free models / DeepSeek / Gemini (key stays server-side, sign-in required)
 ```
 
 ## Environment variables
@@ -44,7 +44,7 @@ All are server-side only; never prefix them with `VITE_`. See [`.env.example`](.
 
 | Variable | Needed for | How to get it |
 |----------|-----------|---------------|
-| `OPENROUTER_API_KEY` | Cloud AI, **free DeepSeek** (recommended) | https://openrouter.ai/keys, Create Key (free, no card). The server looks up which DeepSeek `:free` models exist and tries them in turn |
+| `OPENROUTER_API_KEY` | Cloud AI, **free models** (recommended) | https://openrouter.ai/keys, Create Key (free, no card). Also enable free endpoints at https://openrouter.ai/settings/privacy. The server looks up which `:free` models exist today (free DeepSeek first if one is listed, otherwise e.g. Gemma or Nemotron) and tries them in turn. For DeepSeek itself set `LLM_MODEL=deepseek/deepseek-v4-flash` (paid, about $0.013 per million tokens) |
 | `DEEPSEEK_API_KEY` | Cloud AI, DeepSeek's own API | https://platform.deepseek.com/api_keys. **Not free**: needs a paid balance (model `deepseek-chat`) |
 | `GEMINI_API_KEY` | Cloud AI, Gemini (optional alternative) | Free key: https://aistudio.google.com/apikey |
 | `LLM_PROVIDER` | Optional | Force `openrouter`, `deepseek` or `gemini`. Default: first key that is set, in that order |
@@ -58,7 +58,7 @@ Everything is optional. With **no variables** the app still works fully on-devic
 
 - Sign-in button appears when `GOOGLE_CLIENT_ID` **and** `SESSION_SECRET` are set.
 - Sync needs sign-in **and** both `TURSO_*` variables. Tables are created automatically on first use.
-- Cloud AI needs one of `OPENROUTER_API_KEY` / `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` (and sign-in, when sign-in is configured). DeepSeek's own API has no free plan; the free route is OpenRouter's `:free` DeepSeek models, which have small daily limits and can return "busy" (429) at peak times.
+- Cloud AI needs one of `OPENROUTER_API_KEY` / `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` (and sign-in, when sign-in is configured). DeepSeek's own API has no free plan, and OpenRouter currently lists no free DeepSeek models; its other `:free` models are the free route (small daily limits, can return "busy" (429) at peak times).
 
 ## Set up the Turso database
 
@@ -105,7 +105,7 @@ For local sync use your remote `libsql://` Turso URL (the server uses Turso's HT
 
 | Service | Where | Used for |
 |---------|-------|----------|
-| **DeepSeek** models via **OpenRouter** (free `:free` tier) | `api/analyze.ts` | Optional cloud summary, action items, priorities |
+| **OpenRouter free models** (e.g. Gemma, Nemotron; DeepSeek if listed free) | `api/analyze.ts` | Optional cloud summary, action items, priorities |
 | **DeepSeek API** (own key, paid balance) | `api/analyze.ts` | Same, if `DEEPSEEK_API_KEY` is set |
 | **Google Gemini API** (free AI Studio key) | `api/analyze.ts` | Same, if only `GEMINI_API_KEY` is set |
 | **WebLLM** (MLC AI, Apache 2.0) | `src/ai/engine.ts` | Optional in-browser inference runtime |

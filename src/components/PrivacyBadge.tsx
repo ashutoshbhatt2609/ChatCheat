@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { useDismiss } from '../hooks/useDismiss';
 import { Lock, Cloud, ShieldCheck } from 'lucide-react';
 
 export interface PrivacyBadgeProps {
   /** Cloud AI engine selected: chat text goes to the cloud provider. */
   cloudAi: boolean;
-  /** Provider name, e.g. "DeepSeek (free)". */
+  /** Provider name, e.g. "OpenRouter". */
   cloudLabel: string;
   /** Signed in with sync on: chats and results are stored in the user's account. */
   synced: boolean;
@@ -15,17 +16,7 @@ export const PrivacyBadge: React.FC<PrivacyBadgeProps> = ({ cloudAi, cloudLabel,
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  useDismiss(ref, open, () => setOpen(false));
 
   const label = cloudAi ? `Sent to ${cloudLabel}` : synced ? 'Synced to account' : 'On this device';
   const Icon = cloudAi || synced ? Cloud : Lock;
@@ -54,7 +45,7 @@ export const PrivacyBadge: React.FC<PrivacyBadgeProps> = ({ cloudAi, cloudLabel,
           <ul className="text-xs text-zinc-300 space-y-1.5 list-disc pl-4">
             <li>Quick analysis and on-device models run entirely in your browser.</li>
             <li>
-              {cloudLabel} (cloud) is only used when selected: chat text goes to that provider through this app&apos;s
+              Cloud AI ({cloudLabel}) is only used when selected: chat text goes to that provider through this app&apos;s
               server, which does not store it. Free AI services may log or reuse requests.
             </li>
             <li>

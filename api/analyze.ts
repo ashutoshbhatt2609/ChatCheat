@@ -5,16 +5,17 @@
  * can only run ChatCheat's three analysis tasks — it is not an open LLM relay.
  *
  * Providers (first configured wins; set LLM_PROVIDER to force one):
- *   OPENROUTER_API_KEY  free DeepSeek models via OpenRouter (free key, no card)
+ *   OPENROUTER_API_KEY  free models via OpenRouter (free key, no card); DeepSeek if listed free
  *   DEEPSEEK_API_KEY    DeepSeek's own API (pay-as-you-go balance)
  *   GEMINI_API_KEY      Google Gemini (free AI Studio key)
  * Optional: LLM_MODEL (override model; GEMINI_MODEL is still honoured for Gemini).
  * Chat content is forwarded to the provider only for the request and is never logged or stored here.
  */
 
+import { baseHeaders, clientIp, header, limited, type Req, type Res } from './_lib/http.js';
 import { authConfigured, readSession } from './_lib/session.js';
 import {
-  PROVIDER_LABEL, UpstreamError, chatCompletion, firstWorking, freeDeepseekModels, pickProvider, upstreamMessage,
+  PROVIDER_LABEL, UpstreamError, chatCompletion, firstWorking, freeModels, pickProvider, upstreamMessage,
   type Provider,
 } from './_lib/llm.js';
 
@@ -42,31 +43,9 @@ Only genuine actionable tasks. If none, {"items": []}.`,
 Only include what is truly important; use empty arrays when nothing applies.`,
 };
 
-interface Req {
-  method?: string;
-  headers: Record<string, string | string[] | undefined>;
-  body?: unknown;
-  socket?: { remoteAddress?: string };
-}
-interface Res {
-  status(code: number): Res;
-  setHeader(name: string, value: string): void;
-  json(body: unknown): void;
-}
-
-const hits = new Map<string, number[]>();
-
-export function rateLimited(key: string, now = Date.now()): boolean {
-  const recent = (hits.get(key) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT) {
-    hits.set(key, recent);
-    return true;
-  }
-  recent.push(now);
-  hits.set(key, recent);
-  if (hits.size > 5000) hits.clear(); // bound memory
-  return false;
-}
+/** Best-effort per-client limit for this endpoint (shared limiter from _lib/http). */
+export const rateLimited = (key: string, now = Date.now()): boolean =>
+  limited('analyze', key, RATE_LIMIT, RATE_WINDOW_MS, now);
 
 export interface Validated {
   task: Task;
@@ -142,7 +121,7 @@ export async function runProvider(
   const base = { system: SYSTEM, user: userPrompt(v) };
 
   if (provider === 'openrouter') {
-    const models = override ? [override] : (await freeDeepseekModels(fetchImpl)).slice(0, 4);
+    const models = override ? [override] : await freeModels(fetchImpl);
     return firstWorking(models, (model) =>
       chatCompletion(
         { ...base, model, baseUrl: 'https://openrouter.ai/api/v1', apiKey: env.OPENROUTER_API_KEY as string, headers: { 'X-Title': 'ChatCheat' } },
@@ -161,8 +140,7 @@ export async function runProvider(
 }
 
 export default async function handler(req: Req, res: Res): Promise<void> {
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
+  baseHeaders(res);
   const provider = pickProvider();
 
   // Capability probe so the UI can hide cloud mode when no key is configured.
@@ -192,15 +170,12 @@ export default async function handler(req: Req, res: Res): Promise<void> {
     return;
   }
 
-  const fwd = req.headers['x-forwarded-for'];
-  const ip = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
-  if (rateLimited(ip)) {
+  if (rateLimited(clientIp(req))) {
     res.status(429).json({ error: 'Too many requests. Please wait a minute.' });
     return;
   }
 
-  const ctype = String(req.headers['content-type'] ?? '');
-  if (!ctype.includes('application/json')) {
+  if (!header(req, 'content-type').includes('application/json')) {
     res.status(415).json({ error: 'Content-Type must be application/json.' });
     return;
   }

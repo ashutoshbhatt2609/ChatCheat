@@ -1,7 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Check, ChevronDown, Cloud, Cpu, Loader2, Zap } from 'lucide-react';
+import { useDismiss } from '../hooks/useDismiss';
+import type { Engine } from '../ai/run';
 
-export type Engine = 'rules' | 'cloud' | 'local';
+export type { Engine };
 
 export interface LoadingProgress {
   stage: 'downloading' | 'loading' | 'ready' | 'error';
@@ -15,7 +17,7 @@ export interface EnginePickerProps {
   progress: LoadingProgress;
   /** Server has a cloud AI key configured. */
   cloudConfigured: boolean;
-  /** Provider name shown in the UI, e.g. "DeepSeek (free)". */
+  /** Provider name shown in the UI, e.g. "OpenRouter". */
   cloudLabel: string;
   /** Cloud AI usable right now (configured and, if required, signed in). */
   cloudUsable: boolean;
@@ -36,23 +38,11 @@ export const EnginePicker: React.FC<EnginePickerProps> = (props) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  useDismiss(ref, open, () => setOpen(false));
 
   const localName = LOCAL_MODELS.find((m) => m.id === localModel)?.name;
   const label =
-    engine === 'cloud' ? `${cloudLabel} (cloud)` : engine === 'local' && localName ? `${localName} (on-device)` : 'Quick analysis';
+    engine === 'cloud' ? `${cloudLabel} AI` : engine === 'local' && localName ? `${localName} (on-device)` : 'Quick analysis';
 
   const pick = (fn: () => void) => () => {
     fn();
@@ -98,7 +88,7 @@ export const EnginePicker: React.FC<EnginePickerProps> = (props) => {
             >
               <Cloud className="w-4 h-4 mt-0.5 text-orange-400" aria-hidden="true" />
               <span className="flex-1">
-                <span className="block text-sm text-zinc-100">{cloudLabel} (cloud)</span>
+                <span className="block text-sm text-zinc-100">{cloudLabel} AI</span>
                 <span className="block text-xs text-zinc-400">
                   {cloudUsable
                     ? `Best quality, no download. Sends chat text to ${cloudLabel} through this app’s server. Free AI services may log or reuse requests, so avoid sensitive chats.`

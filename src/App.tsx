@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { LogOut, Trash2, Wand2 } from 'lucide-react';
 import { Layout } from './components/Layout';
 import { ChatImport } from './components/ChatImport';
-import { EnginePicker, type Engine, type LoadingProgress } from './components/EnginePicker';
+import { EnginePicker, type LoadingProgress } from './components/EnginePicker';
+import type { Engine } from './ai/run';
 import { PrivacyBadge } from './components/PrivacyBadge';
 import { SummaryView } from './components/SummaryView';
 import { ActionItems } from './components/ActionItems';
@@ -12,24 +13,15 @@ import { GoogleButton } from './auth/GoogleButton';
 import { useAuth } from './auth/useAuth';
 import { parseChat } from './parsers';
 import { aiEngine, type ModelId } from './ai/engine';
-import { buildSummaryMessages, buildActionItemMessages, buildPriorityMessages } from './ai/prompts';
+import { prepareChat, resolveEngine, runTask } from './ai/run';
 import { db, type StoredConversation } from './db';
 import type { ParsedConversation, Message } from './parsers/types';
-import { heuristicSummary, heuristicActionItems, heuristicPriorities } from './ai/heuristics';
 import { SAMPLE_CHAT } from './sampleChat';
-import { cloudComplete, isCloudAvailable } from './ai/cloud';
+import { isCloudAvailable } from './ai/cloud';
 import {
   deleteAllCloud, deleteCloud, fetchCloud, listCloud, pushCloud, type CloudListItem,
 } from './cloudSync';
-import {
-  parseSummary,
-  parseActionItems,
-  parsePriorities,
-  fitToContext,
-  type SummaryData,
-  type ActionItemData as ActionItem,
-  type PriorityData,
-} from './ai/json';
+import type { SummaryData, ActionItemData as ActionItem, PriorityData } from './ai/json';
 
 /**
  * Root application component.
@@ -40,7 +32,7 @@ export default function App() {
   const { config, user } = auth;
   const syncEnabled = Boolean(user) && config.cloudSync;
 
-  // --- Engine: rule-based (default, on-device) | cloud AI (DeepSeek / Gemini) | on-device WebLLM model ---
+  // --- Engine: rule-based (default, on-device) | cloud AI (OpenRouter / DeepSeek / Gemini) | on-device WebLLM model ---
   const [engine, setEngine] = useState<Engine>('rules');
   const [localModel, setLocalModel] = useState<string | null>(null);
   const [modelProgress, setModelProgress] = useState<LoadingProgress>({
@@ -76,8 +68,6 @@ export default function App() {
   );
 
   const cloudLabel = config.cloudLabel ?? 'cloud AI';
-  const cloudEnabled = engine === 'cloud';
-  const useRules = () => engine === 'rules' || (engine === 'local' && !aiEngine.isReady());
 
   // --- Local history on mount ---
   useEffect(() => {
@@ -125,110 +115,46 @@ export default function App() {
     }
   }, []);
 
-  // --- Format messages as text for the AI ---
-  const formatChatForAI = useCallback((conv: ParsedConversation): string => {
-    return conv.messages
-      .map((m) => {
-        const time = m.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        return `[${time}] ${m.sender}: ${m.content}`;
-      })
-      .join('\n');
-  }, []);
-
-  // --- Fit chat text to the model context window ---
-  const prepareChatText = useCallback(
-    (conv: ParsedConversation): string => {
-      const { text, truncated } = fitToContext(formatChatForAI(conv));
-      if (truncated) {
+  // --- Run the summary and action-item tasks; returns the results so callers can sync them ---
+  const runAnalysis = useCallback(
+    async (conv: ParsedConversation) => {
+      const chat = prepareChat(conv);
+      if (resolveEngine(engine) === 'rules') {
+        setNotice({ kind: 'info', text: 'Quick analysis (rule-based, on-device). Pick cloud AI or an on-device model in the top bar for AI-written summaries.' });
+      } else if (chat.truncated) {
         setNotice({ kind: 'info', text: 'Chat is long: analysis used the most recent messages only.' });
       }
-      return text;
-    },
-    [formatChatForAI],
-  );
-
-  // --- Run analysis; returns the final results so callers can sync them ---
-  const runAnalysis = useCallback(
-    async (conv: ParsedConversation): Promise<{ s: SummaryData | null; a: ActionItem[] }> => {
-      if (useRules()) {
-        const s = heuristicSummary(conv);
-        const a = heuristicActionItems(conv);
-        setSummary(s);
-        setActionItems(a);
-        await db.saveSummary(conv.id, s);
-        await db.saveActionItems(conv.id, a);
-        setNotice({ kind: 'info', text: 'Quick analysis (rule-based, on-device). Pick cloud AI or an on-device model in the top bar for AI-written summaries.' });
-        return { s, a };
-      }
-
-      const chatText = prepareChatText(conv);
-      let finalSummary: SummaryData | null = null;
-      let finalActions: ActionItem[] = [];
 
       setIsSummarizing(true);
-      try {
-        const raw = cloudEnabled
-          ? await cloudComplete('summary', chatText)
-          : await aiEngine.complete(buildSummaryMessages(chatText));
-        finalSummary = parseSummary(raw);
-        setSummary(finalSummary);
-        await db.saveSummary(conv.id, finalSummary);
-      } catch (err) {
-        console.error('Summary failed:', err);
-        finalSummary = heuristicSummary(conv);
-        setSummary(finalSummary);
-        keepFirstError(
-          (cloudEnabled && err instanceof Error ? err.message + ' ' : 'The AI returned an unreadable summary. ') +
-            'Showing a quick rule-based analysis instead.',
-        );
-      }
+      const s = await runTask('summary', engine, conv, chat.text);
+      setSummary(s.value);
       setIsSummarizing(false);
+      if (s.error) keepFirstError(s.error);
+      await db.saveSummary(conv.id, s.value);
 
       setIsExtractingActions(true);
-      try {
-        const raw = cloudEnabled
-          ? await cloudComplete('actions', chatText)
-          : await aiEngine.complete(buildActionItemMessages(chatText));
-        finalActions = parseActionItems(raw);
-        setActionItems(finalActions);
-        await db.saveActionItems(conv.id, finalActions);
-      } catch (err) {
-        console.error('Action items failed:', err);
-        finalActions = heuristicActionItems(conv);
-        setActionItems(finalActions);
-        keepFirstError(cloudEnabled && err instanceof Error ? err.message + ' Showing rule-based results.' : 'AI action-item extraction failed; showing rule-based results.');
-      }
+      const a = await runTask('actions', engine, conv, chat.text);
+      setActionItems(a.value);
       setIsExtractingActions(false);
-      return { s: finalSummary, a: finalActions };
+      if (a.error) keepFirstError(a.error);
+      await db.saveActionItems(conv.id, a.value);
+
+      return { s: s.value, a: a.value };
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [prepareChatText, engine],
+    [engine, keepFirstError],
   );
 
-  // --- Priority analysis (triggered when username changes) ---
+  // --- Priority analysis (triggered when the user enters their name) ---
   const runPriorityAnalysis = useCallback(
     async (conv: ParsedConversation, name: string) => {
       if (!name.trim()) return;
-      if (useRules()) {
-        setPriorities(heuristicPriorities(conv, name));
-        return;
-      }
       setIsAnalyzingPriorities(true);
-      try {
-        const chatText = prepareChatText(conv);
-        const raw = cloudEnabled
-          ? await cloudComplete('priorities', chatText, name)
-          : await aiEngine.complete(buildPriorityMessages(chatText, name));
-        setPriorities(parsePriorities(raw));
-      } catch (err) {
-        console.error('Priority analysis failed:', err);
-        setPriorities(heuristicPriorities(conv, name));
-        keepFirstError(cloudEnabled && err instanceof Error ? err.message + ' Showing rule-based results.' : 'AI priority analysis failed; showing rule-based results.');
-      }
+      const { value, error } = await runTask('priorities', engine, conv, prepareChat(conv).text, name);
+      setPriorities(value);
       setIsAnalyzingPriorities(false);
+      if (error) keepFirstError(error);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [prepareChatText, engine],
+    [engine, keepFirstError],
   );
 
   // --- Push one conversation + results to the user's account (only when signed in) ---

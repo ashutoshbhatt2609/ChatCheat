@@ -99,47 +99,6 @@ export class AIEngine {
     const response = await this.engine.chat.completions.create(request);
     return response.choices[0].message.content || '';
   }
-
-  /**
-   * Run a streaming chat completion.
-   */
-  async *stream(messages: {role: string, content: string}[]): AsyncGenerator<string> {
-    if (!this.engine) throw new Error('Engine not initialized');
-
-    const request: webllm.ChatCompletionRequest = {
-      messages: messages as webllm.ChatCompletionMessageParam[],
-      temperature: 0.1,
-      stream: true
-    };
-    
-    const asyncChunkGenerator = await this.engine.chat.completions.create(request) as AsyncIterable<webllm.ChatCompletionChunk>;
-    
-    for await (const chunk of asyncChunkGenerator) {
-      const delta = chunk.choices[0]?.delta?.content;
-      if (delta) {
-        yield delta;
-      }
-    }
-  }
-
-  /**
-   * Unload model and free resources.
-   */
-  async unload(): Promise<void> {
-    if (this.engine) {
-      await this.engine.unload();
-      this.engine = null;
-      this.currentModel = null;
-    }
-  }
-
-  /**
-   * Get current model info.
-   */
-  getCurrentModel(): ModelInfo | null {
-    if (!this.currentModel) return null;
-    return AVAILABLE_MODELS.find(m => m.id === this.currentModel) || null;
-  }
 }
 
 export const aiEngine = new AIEngine();
