@@ -9,8 +9,8 @@ Complete project overview, architecture and reference. Last updated: 9 October 2
 | Project | ChatCheat — "What Did I Miss?" |
 | Challenge | The Unread Problem: summarize long chats, surface decisions and action items, prioritize by urgency and relevance, highlight mentions and deadlines |
 | Approach | Local-first. Default analysis runs in the browser; cloud AI and account sync are opt-in |
-| Stack | React 18, Vite 6, TypeScript (strict), Tailwind 3, WebLLM, Dexie (IndexedDB), Vercel serverless functions, Turso (libSQL), Google Sign-In, Gemini API |
-| Cost | $0 (free tiers: Gemini via AI Studio, Turso, Vercel hobby) |
+| Stack | React 18, Vite 6, TypeScript (strict), Tailwind 3, WebLLM, Dexie (IndexedDB), Vercel serverless functions, Turso (libSQL), Google Sign-In, cloud LLM (DeepSeek via OpenRouter / DeepSeek / Gemini) |
+| Cost | $0 (free tiers: OpenRouter free DeepSeek models, Turso, Vercel hobby) |
 
 ## Architecture
 
@@ -29,21 +29,21 @@ Complete project overview, architecture and reference. Last updated: 9 October 2
                           Vercel functions (Node ESM, TypeScript)
                           auth.ts: verify Google ID token → HttpOnly cookie
                           data.ts: per-user CRUD ───────────► Turso
-                          analyze.ts: auth + validation + rate limit ─► Gemini
+                          analyze.ts: auth + validation + rate limit ─► DeepSeek / Gemini
 ```
 
 ### Trust boundaries
 
 - The browser is untrusted. User identity comes only from the signed session cookie, never from request fields.
-- Secrets (`GEMINI_API_KEY`, `SESSION_SECRET`, `TURSO_AUTH_TOKEN`) exist only in server environment variables.
-- Chat text leaves the device only when the user (a) selects the Gemini engine, or (b) is signed in, in which case newly imported chats and results are stored in their Turso account.
+- Secrets (`OPENROUTER_API_KEY` / `DEEPSEEK_API_KEY` / `GEMINI_API_KEY`, `SESSION_SECRET`, `TURSO_AUTH_TOKEN`) exist only in server environment variables.
+- Chat text leaves the device only when the user (a) selects the cloud AI engine, or (b) is signed in, in which case newly imported chats and results are stored in their Turso account.
 
 ## Data flow
 
 1. User imports a chat (paste, drop, clipboard, sample).
 2. `parseChat` auto-detects the platform and produces `ParsedConversation`.
 3. Conversation is saved in IndexedDB with a fresh UUID.
-4. Analysis by the selected engine: rules / WebLLM / Gemini. AI output is extracted and validated (`src/ai/json.ts`); on any failure the rule-based result is shown with a visible notice.
+4. Analysis by the selected engine: rules / WebLLM / cloud (DeepSeek or Gemini). AI output is extracted and validated (`src/ai/json.ts`); on any failure the rule-based result is shown with a visible notice.
 5. Results are cached in IndexedDB.
 6. If signed in with sync available, the conversation, messages and results are `PUT` to `/api/data` (Turso, scoped to the user).
 7. Entering a name runs the priorities task (mentions, decisions, open questions, deadlines).
@@ -52,8 +52,12 @@ Complete project overview, architecture and reference. Last updated: 9 October 2
 
 | Variable | Enables | Source |
 |----------|---------|--------|
-| `GEMINI_API_KEY` | Cloud AI | https://aistudio.google.com/apikey (free) |
-| `GEMINI_MODEL` | Optional model override | — |
+| `OPENROUTER_API_KEY` | Cloud AI, free DeepSeek | https://openrouter.ai/keys (free) |
+| `DEEPSEEK_API_KEY` | Cloud AI, DeepSeek direct | https://platform.deepseek.com (paid balance, not free) |
+| `GEMINI_API_KEY` | Cloud AI, Gemini | https://aistudio.google.com/apikey (free) |
+| `LLM_PROVIDER`, `LLM_MODEL` | Optional overrides | — |
+
+Provider order when several keys are set: OpenRouter, then DeepSeek, then Gemini (`LLM_PROVIDER` forces one).
 | `GOOGLE_CLIENT_ID` | Google sign-in | Google Cloud Console OAuth client (Web); add site origins |
 | `SESSION_SECRET` | Google sign-in | Random, 32+ characters |
 | `TURSO_DATABASE_URL` | Account sync | `turso db show <db> --url` |
@@ -82,7 +86,7 @@ Local device storage (IndexedDB via Dexie) holds `conversations`, `messages`, `s
 | `/api/data` | GET | session | List own conversations; `?id=` fetches one |
 | `/api/data` | PUT | session + CSRF | Upsert one conversation (validated, ≤ 2 MB) |
 | `/api/data` | DELETE | session + CSRF | `?id=` one, `?all=1` everything of the caller |
-| `/api/analyze` | GET / POST | session when sign-in is configured | Availability probe / run a task via Gemini (20/min/IP) |
+| `/api/analyze` | GET / POST | session when sign-in is configured | Availability probe / run a task via the configured provider (20/min/IP) |
 
 ## Security checklist
 
@@ -103,7 +107,7 @@ Local device storage (IndexedDB via Dexie) holds `conversations`, `messages`, `s
 - [x] Summary: TL;DR, key points, timeline
 - [x] Action items with assignee, deadline, urgency
 - [x] Personal priorities: mentions, decisions, open questions, deadlines
-- [x] Engines: rule-based (default), WebLLM on-device, Gemini cloud; automatic fallback
+- [x] Engines: rule-based (default), WebLLM on-device, cloud AI (DeepSeek / Gemini); automatic fallback
 - [x] Google sign-in and per-user Turso sync; sync indicator in history
 - [x] History grouped by day; delete one or all (device and account)
 - [x] Privacy pill and details panel showing where data goes
@@ -114,7 +118,7 @@ Local device storage (IndexedDB via Dexie) holds `conversations`, `messages`, `s
 
 | # | Service | Where | Use |
 |---|---------|-------|-----|
-| 1 | Google Gemini API (free tier) | `api/analyze.ts` | Optional cloud summaries, action items, priorities |
+| 1 | DeepSeek models via OpenRouter free tier (or DeepSeek API / Gemini with your own key) | `api/analyze.ts`, `api/_lib/llm.ts` | Optional cloud summaries, action items, priorities |
 | 2 | WebLLM (MLC AI) | `src/ai/engine.ts` | In-browser inference runtime |
 | 3 | Phi-3.5-mini-instruct (Microsoft, MIT) | via WebLLM | Optional on-device model |
 | 4 | Qwen2.5-1.5B-Instruct (Alibaba, Apache 2.0) | via WebLLM | Optional lighter on-device model |

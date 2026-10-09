@@ -12,6 +12,7 @@ import {
   authConfigured, clearCookie, createSessionToken, isSecure, readSession, sessionCookie, verifyGoogleIdToken,
 } from './_lib/session.js';
 import { ensureSchema, getDb } from './_lib/db.js';
+import { PROVIDER_LABEL, pickProvider } from './_lib/llm.js';
 
 export default async function handler(req: Req, res: Res): Promise<void> {
   baseHeaders(res);
@@ -21,7 +22,8 @@ export default async function handler(req: Req, res: Res): Promise<void> {
     res.status(200).json({
       googleClientId: authConfigured() ? process.env.GOOGLE_CLIENT_ID : null,
       cloudSync: authConfigured() && Boolean(getDb()),
-      cloudAi: Boolean(process.env.GEMINI_API_KEY),
+      cloudAi: pickProvider() !== null,
+      cloudLabel: pickProvider() ? PROVIDER_LABEL[pickProvider() as keyof typeof PROVIDER_LABEL] : null,
     });
     return;
   }

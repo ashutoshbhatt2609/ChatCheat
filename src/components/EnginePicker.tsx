@@ -13,8 +13,10 @@ export interface EnginePickerProps {
   engine: Engine;
   localModel: string | null;
   progress: LoadingProgress;
-  /** Server has a Gemini key. */
+  /** Server has a cloud AI key configured. */
   cloudConfigured: boolean;
+  /** Provider name shown in the UI, e.g. "DeepSeek (free)". */
+  cloudLabel: string;
   /** Cloud AI usable right now (configured and, if required, signed in). */
   cloudUsable: boolean;
   onSelectRules: () => void;
@@ -30,7 +32,7 @@ export const LOCAL_MODELS = [
 const busy = (p: LoadingProgress) => p.stage === 'downloading' || p.stage === 'loading';
 
 export const EnginePicker: React.FC<EnginePickerProps> = (props) => {
-  const { engine, localModel, progress, cloudConfigured, cloudUsable } = props;
+  const { engine, localModel, progress, cloudConfigured, cloudUsable, cloudLabel } = props;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -50,7 +52,7 @@ export const EnginePicker: React.FC<EnginePickerProps> = (props) => {
 
   const localName = LOCAL_MODELS.find((m) => m.id === localModel)?.name;
   const label =
-    engine === 'cloud' ? 'Gemini (cloud)' : engine === 'local' && localName ? `${localName} (on-device)` : 'Quick analysis';
+    engine === 'cloud' ? `${cloudLabel} (cloud)` : engine === 'local' && localName ? `${localName} (on-device)` : 'Quick analysis';
 
   const pick = (fn: () => void) => () => {
     fn();
@@ -96,10 +98,10 @@ export const EnginePicker: React.FC<EnginePickerProps> = (props) => {
             >
               <Cloud className="w-4 h-4 mt-0.5 text-orange-400" aria-hidden="true" />
               <span className="flex-1">
-                <span className="block text-sm text-zinc-100">Gemini (cloud)</span>
+                <span className="block text-sm text-zinc-100">{cloudLabel} (cloud)</span>
                 <span className="block text-xs text-zinc-400">
                   {cloudUsable
-                    ? 'Best quality, no download. Sends chat text to Google (free tier may be used to improve Google products).'
+                    ? `Best quality, no download. Sends chat text to ${cloudLabel} through this app’s server. Free AI services may log or reuse requests, so avoid sensitive chats.`
                     : 'Sign in with Google to use cloud AI.'}
                 </span>
               </span>

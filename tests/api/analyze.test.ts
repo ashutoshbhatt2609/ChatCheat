@@ -93,7 +93,7 @@ describe('handler', () => {
 
 describe('upstreamMessage', () => {
   it('maps upstream status to a safe, specific reason', () => {
-    expect(upstreamMessage(new UpstreamError(400))).toMatch(/GEMINI_API_KEY/);
+    expect(upstreamMessage(new UpstreamError(400))).toMatch(/API key/);
     expect(upstreamMessage(new UpstreamError(429))).toMatch(/busy|quota/i);
     expect(upstreamMessage(new UpstreamError(503))).toMatch(/unavailable/i);
     expect(upstreamMessage(new Error('boom: secret-key-123'))).not.toMatch(/secret/);

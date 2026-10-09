@@ -12,9 +12,11 @@ export interface AppConfig {
   googleClientId: string | null;
   cloudSync: boolean;
   cloudAi: boolean;
+  /** Human name of the configured cloud provider, e.g. "DeepSeek (free)". */
+  cloudLabel: string | null;
 }
 
-const EMPTY: AppConfig = { googleClientId: null, cloudSync: false, cloudAi: false };
+const EMPTY: AppConfig = { googleClientId: null, cloudSync: false, cloudAi: false, cloudLabel: null };
 
 /** Loads public config + current session from the server and exposes sign-in/out. */
 export function useAuth() {

@@ -40,7 +40,7 @@ export default function App() {
   const { config, user } = auth;
   const syncEnabled = Boolean(user) && config.cloudSync;
 
-  // --- Engine: rule-based (default, on-device) | Gemini cloud | on-device WebLLM model ---
+  // --- Engine: rule-based (default, on-device) | cloud AI (DeepSeek / Gemini) | on-device WebLLM model ---
   const [engine, setEngine] = useState<Engine>('rules');
   const [localModel, setLocalModel] = useState<string | null>(null);
   const [modelProgress, setModelProgress] = useState<LoadingProgress>({
@@ -75,6 +75,7 @@ export default function App() {
     [],
   );
 
+  const cloudLabel = config.cloudLabel ?? 'cloud AI';
   const cloudEnabled = engine === 'cloud';
   const useRules = () => engine === 'rules' || (engine === 'local' && !aiEngine.isReady());
 
@@ -156,7 +157,7 @@ export default function App() {
         setActionItems(a);
         await db.saveSummary(conv.id, s);
         await db.saveActionItems(conv.id, a);
-        setNotice({ kind: 'info', text: 'Quick analysis (rule-based, on-device). Pick Gemini or an on-device model in the top bar for AI-written summaries.' });
+        setNotice({ kind: 'info', text: 'Quick analysis (rule-based, on-device). Pick cloud AI or an on-device model in the top bar for AI-written summaries.' });
         return { s, a };
       }
 
@@ -402,7 +403,7 @@ export default function App() {
 
   const privacyNote =
     engine === 'cloud'
-      ? 'Cloud AI is on: chat text is sent to Google Gemini for analysis.'
+      ? `Cloud AI is on: chat text is sent to ${cloudLabel} for analysis.`
       : syncEnabled
         ? 'Analysis runs on this device. Your chats and results sync to your signed-in account.'
         : 'Analysis runs on this device. Nothing is uploaded.';
@@ -481,13 +482,14 @@ export default function App() {
           localModel={localModel}
           progress={modelProgress}
           cloudConfigured={config.cloudAi}
+          cloudLabel={cloudLabel}
           cloudUsable={cloudUsable}
           onSelectRules={() => setEngine('rules')}
           onSelectCloud={() => setEngine('cloud')}
           onSelectLocal={handleSelectLocal}
         />
       }
-      topRight={<PrivacyBadge cloudAi={engine === 'cloud'} synced={syncEnabled} />}
+      topRight={<PrivacyBadge cloudAi={engine === 'cloud'} cloudLabel={cloudLabel} synced={syncEnabled} />}
     >
       {notice && (
         <div

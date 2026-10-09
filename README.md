@@ -19,7 +19,7 @@ and the messages that mention **you**. Local-first by default; cloud AI and acco
 |--------|---------|-------|----------------------|
 | **Quick analysis** (default) | Good for decisions, deadlines, mentions | Nothing | Stays in your browser |
 | **On-device model** (WebLLM: Phi-3.5 Mini or Qwen2.5 1.5B) | AI-written | WebGPU browser + 1.2–2.2 GB one-time download | Stays in your browser |
-| **Gemini (cloud)** | Best | Sign in with Google | Chat text is sent to Google Gemini through this app's server |
+| **Cloud AI** (free DeepSeek via OpenRouter, or DeepSeek / Gemini with your own key) | Best | Sign in with Google + one AI key on the server | Chat text is sent to that provider through this app's server |
 
 If an AI engine fails, the app falls back to Quick analysis and tells you why. The top-right pill always shows where data goes right now.
 
@@ -34,7 +34,7 @@ Browser (React + Vite + Tailwind)
  └─ /api  (Vercel serverless functions, only when configured)
       ├─ auth.ts     Google ID-token verification → HttpOnly session cookie
       ├─ data.ts     per-user chat sync  ──────────► Turso (libSQL)
-      └─ analyze.ts  Gemini proxy (key stays server-side, sign-in required)
+      └─ analyze.ts  cloud LLM proxy: DeepSeek (free via OpenRouter) / DeepSeek / Gemini (key stays server-side, sign-in required)
 ```
 
 ## Environment variables
@@ -44,8 +44,11 @@ All are server-side only; never prefix them with `VITE_`. See [`.env.example`](.
 
 | Variable | Needed for | How to get it |
 |----------|-----------|---------------|
-| `GEMINI_API_KEY` | Cloud AI | Free key (no card): https://aistudio.google.com/apikey |
-| `GEMINI_MODEL` | Optional | Override the model. Default tries `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.0-flash` |
+| `OPENROUTER_API_KEY` | Cloud AI, **free DeepSeek** (recommended) | https://openrouter.ai/keys, Create Key (free, no card). The server looks up which DeepSeek `:free` models exist and tries them in turn |
+| `DEEPSEEK_API_KEY` | Cloud AI, DeepSeek's own API | https://platform.deepseek.com/api_keys. **Not free**: needs a paid balance (model `deepseek-chat`) |
+| `GEMINI_API_KEY` | Cloud AI, Gemini (optional alternative) | Free key: https://aistudio.google.com/apikey |
+| `LLM_PROVIDER` | Optional | Force `openrouter`, `deepseek` or `gemini`. Default: first key that is set, in that order |
+| `LLM_MODEL` | Optional | Force a specific model name |
 | `GOOGLE_CLIENT_ID` | Google sign-in | Google Cloud Console → APIs & Services → Credentials → Create OAuth client ID → *Web application*. Add your local and Vercel origins (e.g. `http://localhost:5173`, `https://<your-app>.vercel.app`) under **Authorized JavaScript origins**. No client secret is needed. |
 | `SESSION_SECRET` | Google sign-in | Random string, at least 32 characters (`openssl rand -base64 48`) |
 | `TURSO_DATABASE_URL` | Account sync | `turso db create chatcheat` then `turso db show chatcheat --url` (starts with `libsql://`) |
@@ -55,7 +58,7 @@ Everything is optional. With **no variables** the app still works fully on-devic
 
 - Sign-in button appears when `GOOGLE_CLIENT_ID` **and** `SESSION_SECRET` are set.
 - Sync needs sign-in **and** both `TURSO_*` variables. Tables are created automatically on first use.
-- Cloud AI needs `GEMINI_API_KEY` (and sign-in, when sign-in is configured).
+- Cloud AI needs one of `OPENROUTER_API_KEY` / `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` (and sign-in, when sign-in is configured). DeepSeek's own API has no free plan; the free route is OpenRouter's `:free` DeepSeek models, which have small daily limits and can return "busy" (429) at peak times.
 
 ## Set up the Turso database
 
@@ -69,7 +72,7 @@ Everything is optional. With **no variables** the app still works fully on-devic
 1. Push this repo to GitHub (public) and import it in Vercel. Framework preset: **Vite** (auto-detected; settings come from `vercel.json`).
 2. Add the environment variables above and redeploy.
 3. Add the deployed URL to the Google OAuth client's **Authorized JavaScript origins**.
-4. Open the site, sign in, run the sample chat, and check the Gemini option in the top-bar menu.
+4. Open the site, sign in, run the sample chat, and check the cloud AI option in the top-bar menu.
 
 `api/` contains only the serverless functions (`auth.ts`, `data.ts`, `analyze.ts`, helpers in `_lib/`). Tests live in `tests/`
 so they are never deployed as functions.
@@ -90,7 +93,7 @@ For local sync use your remote `libsql://` Turso URL (the server uses Turso's HT
 ## Privacy and security
 
 - Default mode makes **no network request with your chat**. The only traffic is optional: model files (Hugging Face / GitHub, cached after first download) and Google's sign-in script.
-- Cloud AI and sync are **opt-in**, disclosed in the UI, and need Google sign-in. Google's free Gemini tier may use requests to improve its products.
+- Cloud AI and sync are **opt-in**, disclosed in the UI, and need Google sign-in. Free AI services (OpenRouter free models, DeepSeek, Gemini free tier) may log or reuse requests, so avoid sensitive chats in cloud mode.
 - API key and database credentials exist only in server environment variables.
 - Sessions: Google ID token verified server-side (signature, issuer, audience, expiry, verified email) → signed, HttpOnly, SameSite=Lax cookie (7 days). State-changing calls also need a custom `X-Requested-With` header (CSRF).
 - Every database query is scoped to the user id from the session and uses bound parameters; tests cover cross-user access, SQL injection, forged cookies and missing CSRF headers (`tests/api/backend.test.ts`).
@@ -102,7 +105,9 @@ For local sync use your remote `libsql://` Turso URL (the server uses Turso's HT
 
 | Service | Where | Used for |
 |---------|-------|----------|
-| **Google Gemini API** (free tier) | `api/analyze.ts` | Optional cloud summary, action items, priorities |
+| **DeepSeek** models via **OpenRouter** (free `:free` tier) | `api/analyze.ts` | Optional cloud summary, action items, priorities |
+| **DeepSeek API** (own key, paid balance) | `api/analyze.ts` | Same, if `DEEPSEEK_API_KEY` is set |
+| **Google Gemini API** (free AI Studio key) | `api/analyze.ts` | Same, if only `GEMINI_API_KEY` is set |
 | **WebLLM** (MLC AI, Apache 2.0) | `src/ai/engine.ts` | Optional in-browser inference runtime |
 | **Phi-3.5-mini-instruct** (Microsoft, MIT) | via WebLLM | Optional on-device model |
 | **Qwen2.5-1.5B-Instruct** (Alibaba, Apache 2.0) | via WebLLM | Optional lightweight on-device model |

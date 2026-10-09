@@ -21,7 +21,7 @@ Scores received for this submission (out of 100):
 
 | Criterion | Score | What drove it (prompts → evidence) |
 |-----------|:-----:|------------------------------------|
-| Innovation & Novelty | **90** | Three interchangeable engines behind one UI: instant rule-based analysis (default, no download), on-device WebLLM models, and opt-in Gemini cloud. Automatic fallback when any AI step fails. Privacy pill always shows where data goes. *Prompts 3–5, 6* |
+| Innovation & Novelty | **90** | Three interchangeable engines behind one UI: instant rule-based analysis (default, no download), on-device WebLLM models, and opt-in cloud AI (free DeepSeek via OpenRouter, DeepSeek, or Gemini). Automatic fallback when any AI step fails. Privacy pill always shows where data goes. *Prompts 3–5, 6* |
 | UI / UX & Impact | **88** | Redesign from the reference layout: grouped history, engine picker, centered composer, quick-start cards, sample chat for instant demo, honest notices for every failure. Dark theme chosen by the developer. *Prompts 6, 9, 13* |
 | Code Standards & Quality | **85** | Strict TypeScript; AI output validated (`src/ai/json.ts`); small modules; 62 tests; bugs found by testing with realistic input; docs corrected when found stale. *Prompts 1–3, 10, 13* |
 | Backend & Architecture | **80** | Serverless functions (auth, data, analyze) with a clear trust boundary, per-user composite keys, server-held prompts and secrets. Held back by the gaps in Part 3 (in-memory limits, no live integration test, runtime schema creation). *Prompts 4, 7, 8, 10* |
@@ -38,13 +38,15 @@ Average: **84.6**. The two lowest criteria (80) are exactly the areas Part 3 tar
 | Service | License / cost | Where | Role |
 |---------|----------------|-------|------|
 | **Claude Code** (Anthropic) | — | Development only | AI pair-programmer that wrote and tested the code from the prompts below. Not part of the shipped product |
-| **Google Gemini API** (free tier) | Free via Google AI Studio | `api/analyze.ts` | Optional cloud engine (requires sign-in) |
+| **DeepSeek** via **OpenRouter** free models | Free tier (small daily limits) | `api/analyze.ts`, `api/_lib/llm.ts` | Optional cloud engine (requires sign-in); default when `OPENROUTER_API_KEY` is set |
+| **DeepSeek API** | Paid balance (no free plan) | same | Used when `DEEPSEEK_API_KEY` is set |
+| **Google Gemini API** | Free via Google AI Studio | same | Used when only `GEMINI_API_KEY` is set |
 | **WebLLM** (MLC AI) | Apache 2.0 | `src/ai/engine.ts` | Runs models in the browser via WebGPU |
 | **Phi-3.5-mini-instruct** (Microsoft) | MIT | via WebLLM | Optional on-device model |
 | **Qwen2.5-1.5B-Instruct** (Alibaba) | Apache 2.0 | via WebLLM | Optional lighter on-device model |
 
 The default **Quick analysis** engine (`src/ai/heuristics.ts`) is rule-based and uses no model.
-Data flow: on-device engines never send chat text anywhere; the cloud engine sends chat text to Google Gemini through the app's own `/api/analyze` function. Non-Gen-AI services: Google Identity Services (sign-in), Turso (storage), Vercel (hosting).
+Data flow: on-device engines never send chat text anywhere; the cloud engine sends chat text to the configured provider (DeepSeek or Gemini) through the app's own `/api/analyze` function. Non-Gen-AI services: Google Identity Services (sign-in), Turso (storage), Vercel (hosting).
 
 ---
 
@@ -87,6 +89,7 @@ Set once, applied to every step:
 | 13 | Screenshot: wrong participants + "AI action-item extraction failed"; "why did it happen?" | Parser bug: the fallback regex let any text before a colon become a sender. Rewrote it to require name-like speakers and to treat non-chat text as one block. Cloud errors now report a safe, specific reason (key rejected / quota / unavailable) | Regression tests using the exact screenshot text; 62 tests |
 | 14 | "Demo env, I'll add the key" | `.env` template (gitignored) with per-variable instructions; clarified that Vercel needs the key in its own settings | — |
 | 15 | Screenshot of evaluation scores; "make prompt.md better" | This document: results, criterion mapping, playbook, gaps and next prompts | — |
+| 16 | "Use the free DeepSeek API; I do not want to set up Gemini" | Checked the facts first: DeepSeek's own API has no free plan; the free route is OpenRouter's `:free` DeepSeek models. Built a provider layer (`api/_lib/llm.ts`): OpenRouter (free DeepSeek, models discovered at runtime, reasoning `<think>` blocks stripped), DeepSeek direct, Gemini kept optional; UI names the configured provider; fixed the dev server's env allowlist | 75 tests incl. provider order, key-in-header, model fallback on 429, discovery fallback |
 
 ## Lessons recorded from the process
 
@@ -183,7 +186,7 @@ Suggested order for the best return: sessions table → CI → rate limits in th
 2. Chat text is **untrusted data**. The cloud system prompt tells the model to ignore instructions inside `<chat>` tags.
 3. Output is never trusted: `src/ai/json.ts` extracts the JSON, validates every field, coerces bad values to safe defaults, and the UI falls back to rule-based results if parsing fails.
 4. Long chats are cut to the most recent ~24,000 characters (`fitToContext`); the server rejects more than 30,000.
-5. Low temperature (0.1). On-device requests use WebLLM's `json_object` response format; Gemini uses `responseMimeType: application/json`.
+5. Low temperature (0.1). On-device requests use WebLLM's `json_object` response format; Gemini uses `responseMimeType: application/json`; DeepSeek direct uses `response_format: json_object`; free OpenRouter models are asked for JSON in the prompt only (not all support the parameter) and rely on the validation layer.
 
 ## On-device prompts (`src/ai/prompts.ts`)
 
@@ -245,7 +248,7 @@ schema, with no markdown.
 - `actions`: "Extract action items, tasks and commitments." — `items[]`; only genuine tasks; `{"items": []}` if none.
 - `priorities`: `Focus on the user "{username}".` — `mentions`, `decisions`, `questions`, `deadlines`; empty arrays when nothing applies. The username is stripped of quotes, angle brackets and newlines and limited to 60 characters before use.
 
-Model order when `GEMINI_MODEL` is unset: `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.0-flash` (the next model is tried only on 404/429/503).
+Provider order: `OPENROUTER_API_KEY` (free DeepSeek), then `DEEPSEEK_API_KEY`, then `GEMINI_API_KEY`; `LLM_PROVIDER` forces one. OpenRouter: the server lists current free DeepSeek models (non-reasoning first) and tries up to four, moving on only for 404/429/503. DeepSeek direct: `deepseek-chat`. Gemini: `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.0-flash`. `LLM_MODEL` overrides the model. The same system prompt and task prompts are used for every provider.
 
 ## Rule-based analysis (no model) — `src/ai/heuristics.ts`
 

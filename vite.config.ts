@@ -2,7 +2,8 @@ import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const ENV_KEYS = [
-  'GEMINI_API_KEY', 'GEMINI_MODEL', 'GOOGLE_CLIENT_ID', 'SESSION_SECRET', 'TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN',
+  'OPENROUTER_API_KEY', 'DEEPSEEK_API_KEY', 'GEMINI_API_KEY', 'LLM_PROVIDER', 'LLM_MODEL', 'GEMINI_MODEL',
+  'GOOGLE_CLIENT_ID', 'SESSION_SECRET', 'TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN',
 ];
 
 /** Serves api/*.ts during `npm run dev` the same way Vercel does in production. */

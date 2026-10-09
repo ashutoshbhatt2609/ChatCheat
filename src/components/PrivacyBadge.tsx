@@ -2,14 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Lock, Cloud, ShieldCheck } from 'lucide-react';
 
 export interface PrivacyBadgeProps {
-  /** Cloud AI engine selected: chat text goes to Google Gemini. */
+  /** Cloud AI engine selected: chat text goes to the cloud provider. */
   cloudAi: boolean;
+  /** Provider name, e.g. "DeepSeek (free)". */
+  cloudLabel: string;
   /** Signed in with sync on: chats and results are stored in the user's account. */
   synced: boolean;
 }
 
 /** Always-visible pill that states where data goes right now, with details on click. */
-export const PrivacyBadge: React.FC<PrivacyBadgeProps> = ({ cloudAi, synced }) => {
+export const PrivacyBadge: React.FC<PrivacyBadgeProps> = ({ cloudAi, cloudLabel, synced }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -25,7 +27,7 @@ export const PrivacyBadge: React.FC<PrivacyBadgeProps> = ({ cloudAi, synced }) =
     };
   }, [open]);
 
-  const label = cloudAi ? 'Sent to Gemini' : synced ? 'Synced to account' : 'On this device';
+  const label = cloudAi ? `Sent to ${cloudLabel}` : synced ? 'Synced to account' : 'On this device';
   const Icon = cloudAi || synced ? Cloud : Lock;
 
   return (
@@ -52,8 +54,8 @@ export const PrivacyBadge: React.FC<PrivacyBadgeProps> = ({ cloudAi, synced }) =
           <ul className="text-xs text-zinc-300 space-y-1.5 list-disc pl-4">
             <li>Quick analysis and on-device models run entirely in your browser.</li>
             <li>
-              Gemini (cloud) is only used when selected: chat text goes to Google through this app&apos;s server,
-              which does not store it. Google&apos;s free tier may use requests to improve its products.
+              {cloudLabel} (cloud) is only used when selected: chat text goes to that provider through this app&apos;s
+              server, which does not store it. Free AI services may log or reuse requests.
             </li>
             <li>
               Signing in with Google is optional. When signed in, new chats and their results are stored in your

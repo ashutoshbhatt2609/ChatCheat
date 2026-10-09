@@ -4,7 +4,7 @@ import { apiFetch } from '../api';
 
 export type CloudTask = 'summary' | 'actions' | 'priorities';
 
-/** True when the server has a Gemini key and (if sign-in is configured) the user is signed in. Never throws. */
+/** True when the server has a cloud AI key and (if sign-in is configured) the user is signed in. Never throws. */
 export async function isCloudAvailable(): Promise<boolean> {
   try {
     const r = await apiFetch('/api/analyze');
