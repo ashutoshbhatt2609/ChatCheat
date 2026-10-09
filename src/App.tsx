@@ -439,8 +439,14 @@ export default function App() {
           <div className="rounded-2xl border border-zinc-800 bg-zinc-800/30 p-5">
             <h2 className="text-xl font-semibold text-zinc-50">{activeConversation.name}</h2>
             <p className="text-sm text-zinc-400 mt-1">
-              {activeConversation.messageCount} messages · {activeConversation.participants.length} participants ·{' '}
-              <span className="capitalize">{activeConversation.platform}</span>
+              {activeConversation.participants.length < 2 ? (
+                `Pasted text · ${activeConversation.messages[0]?.content.split('\n').length ?? 0} lines`
+              ) : (
+                <>
+                  {activeConversation.messageCount} messages · {activeConversation.participants.length} participants ·{' '}
+                  <span className="capitalize">{activeConversation.platform}</span>
+                </>
+              )}
             </p>
           </div>
 
