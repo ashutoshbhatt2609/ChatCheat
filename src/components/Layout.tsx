@@ -1,86 +1,106 @@
 import React, { useState } from 'react';
-import { Menu, X, Sparkles } from 'lucide-react';
-import { PrivacyBadge } from './PrivacyBadge';
+import { Menu, Plus, PanelLeftClose, Sparkles, X } from 'lucide-react';
+
+export const Logo: React.FC<{ className?: string }> = ({ className = 'w-7 h-7' }) => (
+  <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
+    <rect x="2" y="2" width="28" height="28" rx="9" fill="#f97316" />
+    <path d="M9 11.5a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-5l-4 3.5v-3.5a3 3 0 0 1-2-2.8z" fill="#18181b" />
+    <path d="m12.5 14 2.2 2.2L19.5 12" stroke="#f97316" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
 
 export interface LayoutProps {
   children: React.ReactNode;
-  sidebar: React.ReactNode;
+  /** History list rendered inside the sidebar. */
+  history: React.ReactNode;
+  /** Shortcuts under "New chat" (e.g. sample chat). */
+  nav?: React.ReactNode;
+  /** Bottom of sidebar: settings / account. */
+  account: React.ReactNode;
+  /** Left side of the top bar (engine picker). */
+  topLeft: React.ReactNode;
+  /** Right side of the top bar. */
+  topRight?: React.ReactNode;
+  onNewChat: () => void;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, sidebar }) => {
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+export const Layout: React.FC<LayoutProps> = ({ children, history, nav, account, topLeft, topRight, onNewChat }) => {
+  const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  const newChat = () => {
+    onNewChat();
+    setOpen(false);
+  };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-900 text-slate-100 font-sans overflow-hidden">
-      {/* Header */}
-      <header className="flex-shrink-0 h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md z-30 px-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+    <div className="h-screen bg-zinc-950 text-zinc-100 font-sans flex p-0 md:p-3 gap-3 overflow-hidden">
+      {open && <div className="fixed inset-0 bg-black/60 z-30 md:hidden" onClick={() => setOpen(false)} />}
+
+      {/* Sidebar */}
+      <aside
+        aria-label="Sidebar"
+        className={`fixed md:static inset-y-0 left-0 z-40 w-72 flex-shrink-0 flex-col bg-zinc-900 md:rounded-2xl border border-zinc-800
+          ${collapsed ? 'md:hidden' : 'md:flex'} ${open ? 'flex' : 'hidden'}`}
+      >
+        <div className="flex items-center justify-between px-4 pt-4 pb-3">
+          <div className="flex items-center gap-2.5">
+            <Logo />
+            <span className="text-lg font-semibold tracking-tight">ChatCheat</span>
+          </div>
           <button
-            onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-            className="md:hidden p-2 -ml-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg"
-            aria-label="Toggle menu"
+            onClick={() => (open ? setOpen(false) : setCollapsed(true))}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-orange-500/60"
+            aria-label="Close sidebar"
           >
-            {isMobileSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {open ? <X className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
           </button>
-          
-          <div className="flex items-center gap-2">
-            <div className="bg-green-500/10 p-1.5 rounded-lg border border-green-500/20">
-              <Sparkles className="w-5 h-5 text-green-500" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
-                ChatCheat
-              </h1>
-              <p className="text-[10px] font-medium text-slate-500 uppercase tracking-widest hidden sm:block">
-                What Did I Miss?
-              </p>
-            </div>
-          </div>
         </div>
 
-        <div className="flex items-center">
-          <PrivacyBadge />
+        <div className="px-3">
+          <button
+            onClick={newChat}
+            className="w-full flex items-center justify-between rounded-xl bg-orange-500 hover:bg-orange-400 text-zinc-950 font-medium text-sm px-3.5 py-2.5 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300"
+          >
+            <span className="flex items-center gap-2">
+              <Plus className="w-4 h-4" /> New chat
+            </span>
+          </button>
+          {nav && <nav className="mt-3 space-y-0.5">{nav}</nav>}
         </div>
-      </header>
 
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* Mobile Sidebar Overlay */}
-        {isMobileSidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black/50 z-40 md:hidden"
-            onClick={() => setIsMobileSidebarOpen(false)}
-          />
-        )}
+        <div className="mt-3 flex-1 overflow-y-auto px-2 pb-2">{history}</div>
 
-        {/* Sidebar */}
-        <aside 
-          className={`
-            fixed md:static inset-y-0 left-0 z-40 w-72 bg-slate-900 border-r border-slate-800 transform transition-transform duration-300 ease-in-out flex flex-col
-            ${isMobileSidebarOpen ? 'translate-x-0 mt-16 h-[calc(100vh-4rem)]' : '-translate-x-full md:translate-x-0'}
-          `}
-        >
-          <div className="flex-1 overflow-y-auto py-2">
-            <h2 className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              History
-            </h2>
-            {sidebar}
+        <div className="border-t border-zinc-800 p-3">{account}</div>
+      </aside>
+
+      {/* Main panel */}
+      <div className="flex-1 min-w-0 flex flex-col bg-zinc-900 md:rounded-2xl border border-zinc-800 overflow-hidden">
+        <header className="flex-shrink-0 h-14 px-3 md:px-4 flex items-center justify-between gap-3 border-b border-zinc-800">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => (collapsed ? setCollapsed(false) : setOpen(true))}
+              className={`p-2 -ml-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-orange-500/60 ${
+                collapsed ? '' : 'md:hidden'
+              }`}
+              aria-label="Open sidebar"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            {topLeft}
           </div>
-        </aside>
+          <div className="flex items-center gap-2">{topRight}</div>
+        </header>
 
-        {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto bg-slate-900 p-4 md:p-6 lg:p-8 scroll-smooth">
-          <div className="max-w-5xl mx-auto pb-20">
-            {children}
-          </div>
+        <main className="flex-1 overflow-y-auto px-4 md:px-8 py-6">
+          <div className="max-w-3xl mx-auto">{children}</div>
         </main>
-      </div>
 
-      {/* Footer */}
-      <footer className="flex-shrink-0 py-3 px-4 border-t border-slate-800 bg-slate-900 text-center z-20">
-        <p className="text-xs text-slate-500 font-medium">
-          Local-first · WebLLM on-device or optional Gemini cloud AI
-        </p>
-      </footer>
+        <footer className="flex-shrink-0 py-2.5 px-4 text-center text-[11px] text-zinc-500 border-t border-zinc-800/60">
+          <Sparkles className="inline w-3 h-3 mr-1 -mt-0.5 text-orange-500" aria-hidden="true" />
+          ChatCheat can make mistakes. Check important info. Chats stay on this device unless you sign in or use cloud AI.
+        </footer>
+      </div>
     </div>
   );
 };

@@ -1,14 +1,16 @@
-/** Client for the optional cloud AI proxy (/api/analyze). Only used after explicit user consent. */
+import { apiFetch } from '../api';
+
+/** Client for the optional cloud AI proxy (/api/analyze). Only used after explicit user choice. */
 
 export type CloudTask = 'summary' | 'actions' | 'priorities';
 
-/** True when the server has a GEMINI_API_KEY configured. Never throws. */
+/** True when the server has a Gemini key and (if sign-in is configured) the user is signed in. Never throws. */
 export async function isCloudAvailable(): Promise<boolean> {
   try {
-    const r = await fetch('/api/analyze', { method: 'GET' });
+    const r = await apiFetch('/api/analyze');
     if (!r.ok) return false;
-    const data = (await r.json()) as { available?: boolean };
-    return data.available === true;
+    const data = (await r.json()) as { available?: boolean; requiresAuth?: boolean; authed?: boolean };
+    return data.available === true && (!data.requiresAuth || data.authed === true);
   } catch {
     return false;
   }
@@ -16,9 +18,8 @@ export async function isCloudAvailable(): Promise<boolean> {
 
 /** Run one analysis task in the cloud. Returns raw model text (validate with ./json). */
 export async function cloudComplete(task: CloudTask, chat: string, username?: string): Promise<string> {
-  const r = await fetch('/api/analyze', {
+  const r = await apiFetch('/api/analyze', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ task, chat, username }),
   });
   const data = (await r.json().catch(() => ({}))) as { text?: string; error?: string };

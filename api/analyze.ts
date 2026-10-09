@@ -8,6 +8,8 @@
  * Chat content is forwarded to Google only for the request and is never logged or stored here.
  */
 
+import { authConfigured, readSession } from './_lib/session.js';
+
 export type Task = 'summary' | 'actions' | 'priorities';
 
 // Free-tier friendly models, tried in order when GEMINI_MODEL is not set.
@@ -138,7 +140,8 @@ export default async function handler(req: Req, res: Res): Promise<void> {
 
   // Capability probe so the UI can hide cloud mode when no key is configured.
   if (req.method === 'GET') {
-    res.status(200).json({ available: Boolean(apiKey) });
+    const user = await readSession(req);
+    res.status(200).json({ available: Boolean(apiKey), requiresAuth: authConfigured(), authed: Boolean(user) });
     return;
   }
   if (req.method !== 'POST') {
@@ -148,6 +151,12 @@ export default async function handler(req: Req, res: Res): Promise<void> {
   }
   if (!apiKey) {
     res.status(503).json({ error: 'Cloud AI is not configured.' });
+    return;
+  }
+
+  // When Google sign-in is configured, cloud AI is for signed-in users only (protects the free quota).
+  if (authConfigured() && !(await readSession(req))) {
+    res.status(401).json({ error: 'Sign in to use cloud AI.' });
     return;
   }
 

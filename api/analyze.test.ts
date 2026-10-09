@@ -66,7 +66,7 @@ describe('handler', () => {
     process.env.GEMINI_API_KEY = 'SECRET';
     const res = mockRes();
     await handler({ method: 'GET', headers: {} }, res);
-    expect(res.body).toEqual({ available: true });
+    expect(res.body).toMatchObject({ available: true });
   });
   it('503 when unconfigured, 405 for other methods', async () => {
     delete process.env.GEMINI_API_KEY;
