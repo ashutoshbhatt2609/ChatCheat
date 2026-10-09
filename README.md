@@ -57,6 +57,13 @@ Everything is optional. With **no variables** the app still works fully on-devic
 - Sync needs sign-in **and** both `TURSO_*` variables. Tables are created automatically on first use.
 - Cloud AI needs `GEMINI_API_KEY` (and sign-in, when sign-in is configured).
 
+## Set up the Turso database
+
+1. Sign in at https://turso.tech (Google or GitHub) and **Create Database** named `chatcheat`.
+2. Copy its URL (`libsql://…`) and create a token (database page → *Create Token*), or with the CLI: `turso db show chatcheat --url` and `turso db tokens create chatcheat`.
+3. Put them in `.env` (local) and in Vercel as `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`.
+4. Optional check: `npm run db:init` connects, creates the tables from [`db/schema.sql`](db/schema.sql) and prints `Tables ready: conversations, users`. (The app also creates them automatically on first use.)
+
 ## Deploy to Vercel
 
 1. Push this repo to GitHub (public) and import it in Vercel. Framework preset: **Vite** (auto-detected; settings come from `vercel.json`).

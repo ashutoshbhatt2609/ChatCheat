@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "tsc -b",
+    "db:init": "node --env-file=.env scripts/init-db.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
