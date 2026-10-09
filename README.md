@@ -1,249 +1,134 @@
-# 🗨️ ChatCheat — "What Did I Miss?"
+# ChatCheat — "What Did I Miss?"
 
-> **AI-powered chat summarizer that runs 100% locally.** Never miss important messages again.
+An AI micro-app that turns an overwhelming chat into a quick catch-up: a summary, the action items and deadlines,
+and the messages that mention **you**. Local-first by default; cloud AI and account sync are opt-in.
 
-![Privacy](https://img.shields.io/badge/Privacy-100%25%20Local-green?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
-![AI](https://img.shields.io/badge/AI-WebLLM-purple?style=flat-square)
+**Challenge:** The Unread Problem — "What Did I Miss?"
 
-## 🎯 Problem
+## What it does
 
-You open your phone after a few hours and find **hundreds of unread messages** across WhatsApp groups, Slack channels, and Discord servers. Reading through everything takes forever. You might miss important decisions, action items, or messages directed at you.
+- **Import** a chat by pasting text, dropping a file, or using the clipboard. Auto-detects **WhatsApp, Telegram, Slack, Discord** (and a generic `Name: message` fallback). Try it instantly with the built-in **sample chat**.
+- **Summarize:** TL;DR, key points, timeline.
+- **Action items:** task, assignee, deadline, urgency (high / medium / low), sorted by urgency.
+- **Prioritize for you:** enter your name to see mentions, decisions, unanswered questions and deadlines.
+- **History:** past chats are saved and grouped by Today / Yesterday / Earlier. "Delete all my data" wipes them.
 
-**ChatCheat solves this** by using AI to instantly summarize your chats, extract action items, and highlight what matters most — **all without your data ever leaving your device**.
+## Choose where analysis runs
 
----
+| Engine | Quality | Needs | Where your chat goes |
+|--------|---------|-------|----------------------|
+| **Quick analysis** (default) | Good for decisions, deadlines, mentions | Nothing | Stays in your browser |
+| **On-device model** (WebLLM: Phi-3.5 Mini or Qwen2.5 1.5B) | AI-written | WebGPU browser + 1.2–2.2 GB one-time download | Stays in your browser |
+| **Gemini (cloud)** | Best | Sign in with Google | Chat text is sent to Google Gemini through this app's server |
 
-## ✨ Features
+If an AI engine fails, the app falls back to Quick analysis and tells you why. The top-right pill always shows where data goes right now.
 
-### 📥 Multi-Format Chat Import
-- **Paste** raw chat text directly
-- **Upload** `.txt`, `.json`, `.csv` chat exports
-- **Auto-detect** platform: WhatsApp, Telegram, Slack, Discord
-- Drag-and-drop support
-
-### 📝 Smart Summarization
-- **TL;DR** — Quick 2-3 sentence overview
-- **Key Points** — Bullet-point highlights
-- **Timeline** — Chronological summary of important events
-
-### ✅ Action Item Extraction
-- Identifies tasks, deadlines, commitments
-- Tags who's responsible
-- Urgency scoring: 🔴 High / 🟡 Medium / 🟢 Low
-
-### 🔍 Priority Filter ("What Did I Miss?")
-- **@Mentions** — Messages where you were mentioned
-- **Decisions** — Key decisions made in your absence
-- **Questions** — Unanswered questions directed at you
-- **Deadlines** — Time-sensitive items
-
-### 🔒 100% Local & Private
-- All AI processing runs in your browser via WebGPU
-- **No data sent to any server** — ever
-- No API keys, no cloud calls
-- GDPR/HIPAA compliant by design
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  Browser (All Local)             │
-│                                                  │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────┐  │
-│  │   React   │→│ Chat Parsers │→│  WebLLM    │  │
-│  │    UI     │  │ (WA/TG/Slack│  │(Phi-3.5-mini)│  │
-│  │           │←│  /Discord)   │  │  via GPU   │  │
-│  └──────────┘  └──────────────┘  └───────────┘  │
-│       ↕                              ↕           │
-│  ┌──────────────────────────────────────────┐    │
-│  │         IndexedDB (Dexie.js)              │    │
-│  │    Conversations · Summaries · Actions    │    │
-│  └──────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────┘
+Browser (React + Vite + Tailwind)
+ ├─ Parsers → Quick analysis (rules) ──────────────► results      (always on-device)
+ ├─ WebLLM (WebGPU) ───────────────────────────────► results      (on-device, optional)
+ ├─ IndexedDB (Dexie): chats + results on this device
+ │
+ └─ /api  (Vercel serverless functions, only when configured)
+      ├─ auth.ts     Google ID-token verification → HttpOnly session cookie
+      ├─ data.ts     per-user chat sync  ──────────► Turso (libSQL)
+      └─ analyze.ts  Gemini proxy (key stays server-side, sign-in required)
 ```
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| Frontend | React 18 + Vite | Fast, modern UI |
-| Styling | Tailwind CSS | Responsive dark theme |
-| Icons | Lucide React | Consistent iconography |
-| AI Engine | WebLLM (MLC AI) | In-browser LLM inference |
-| Primary Model | Phi-3.5-mini-instruct (3.8B) | Best reasoning at this size |
-| Fallback Model | Qwen2.5-1.5B-Instruct | Lightweight alternative |
-| Storage | IndexedDB (Dexie.js) | Local persistence |
-| Testing | Vitest | Unit & integration tests |
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-- **Node.js** 18+ and npm
-- **Chrome 113+** (or any browser with WebGPU support)
-- A GPU with 4GB+ VRAM (for best performance)
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/chatcheat.git
-cd chatcheat
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-Visit `http://localhost:5173` in your browser.
-
-### First Run
-1. Select an AI model (Phi-3.5-mini recommended)
-2. Wait for the model to download (~2GB, cached after first time)
-3. Paste or upload a chat export
-4. Get instant summaries, action items, and priority highlights!
-
----
-
-## 📋 How to Export Chats
-
-### WhatsApp
-1. Open the chat → ⋮ → More → Export Chat → Without Media
-2. Share the `.txt` file
-
-### Telegram
-1. Open the chat → ⋮ → Export Chat History
-2. Choose JSON format
-
-### Slack
-1. Go to Workspace settings → Import/Export
-2. Download the export
-
-### Discord
-1. Use DiscordChatExporter or copy-paste messages directly
-
----
-
-## 🤖 Gen AI Services Used
-
-| Service | License | Cost | Where Used |
-|---------|---------|------|-----------|
-| **WebLLM** (MLC AI) | Apache 2.0 | Free | `src/ai/engine.ts` — In-browser inference engine |
-| **Phi-3.5-mini-instruct** | MIT | Free | Primary summarization model |
-| **Qwen2.5-1.5B-Instruct** | Apache 2.0 | Free | Lightweight fallback model |
-| **WebGPU** | Browser API | Free | Hardware-accelerated inference |
-
-> See [`prompt.md`](prompt.md) for detailed documentation of all AI prompts used.
-
----
-
-## 🔐 Privacy & Security
-
-- ✅ **Zero network requests** for AI processing
-- ✅ **All data stays in browser** (IndexedDB)
-- ✅ **No telemetry** or analytics
-- ✅ **No API keys** required
-- ✅ **Open source** — audit the code yourself
-- ✅ Works **offline** after model is cached
-
----
-
-## ♿ Accessibility
-
-- Full keyboard navigation
-- Semantic HTML with ARIA labels
-- Screen reader compatible
-- Responsive design (mobile → desktop)
-- High contrast dark theme
-
----
-
-## 📁 Project Structure
-
-```
-src/
-├── ai/
-│   ├── engine.ts        # WebLLM wrapper & model management
-│   ├── prompts.ts       # AI prompt templates
-│   └── worker.ts        # Web Worker for off-thread inference
-├── components/
-│   ├── ActionItems.tsx   # Action items display
-│   ├── ChatImport.tsx    # Chat import (drag-drop, paste, upload)
-│   ├── ConversationHistory.tsx  # Sidebar history
-│   ├── Layout.tsx        # Main app layout
-│   ├── ModelLoader.tsx   # Model download progress
-│   ├── PriorityFilter.tsx # Priority/mentions filter
-│   ├── PrivacyBadge.tsx  # Privacy indicator
-│   └── SummaryView.tsx   # Summary with tabs
-├── db/
-│   └── index.ts          # IndexedDB storage (Dexie.js)
-├── parsers/
-│   ├── types.ts          # Shared types
-│   ├── whatsapp.ts       # WhatsApp parser
-│   ├── telegram.ts       # Telegram parser
-│   ├── slack.ts          # Slack parser
-│   ├── discord.ts        # Discord parser
-│   ├── generic.ts        # Fallback parser
-│   └── index.ts          # Auto-detect & route
-├── App.tsx               # Root component
-├── main.tsx              # Entry point
-└── index.css             # Global styles
-```
-
----
-
-## 🧪 Testing
-
-```bash
-npm run test        # Run all tests
-npm run lint        # Lint code
-npm run build       # Production build
-```
-
----
-
-## 📜 License
-
-MIT License — free to use, modify, and distribute.
-
----
-
-## 🙏 Acknowledgments
-
-- [WebLLM](https://webllm.mlc.ai/) by MLC AI — for making in-browser LLM inference possible
-- [Tailwind CSS](https://tailwindcss.com/) — for the beautiful utility-first styling
-- [Lucide](https://lucide.dev/) — for the clean icon set
-- [Dexie.js](https://dexie.org/) — for the elegant IndexedDB wrapper
 
 ## Environment variables
 
-| Name | Required | Where | Purpose |
-|------|----------|-------|---------|
-| `GEMINI_API_KEY` | Optional (enables cloud AI) | Server only (Vercel project settings / local `.env`) | Free key from https://aistudio.google.com/apikey |
-| `GEMINI_MODEL` | Optional | Server only | Override model; default tries `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.0-flash` |
+Set these in **Vercel → Project → Settings → Environment Variables** (all environments), then **redeploy**.
+All are server-side only; never prefix them with `VITE_`. See [`.env.example`](.env.example).
 
-Never prefix these with `VITE_` — they must stay on the server. Without a key the app still works:
-the cloud toggle is hidden and the on-device rule-based analyzer (or an optional local WebLLM model) is used.
+| Variable | Needed for | How to get it |
+|----------|-----------|---------------|
+| `GEMINI_API_KEY` | Cloud AI | Free key (no card): https://aistudio.google.com/apikey |
+| `GEMINI_MODEL` | Optional | Override the model. Default tries `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.0-flash` |
+| `GOOGLE_CLIENT_ID` | Google sign-in | Google Cloud Console → APIs & Services → Credentials → Create OAuth client ID → *Web application*. Add your local and Vercel origins (e.g. `http://localhost:5173`, `https://<your-app>.vercel.app`) under **Authorized JavaScript origins**. No client secret is needed. |
+| `SESSION_SECRET` | Google sign-in | Random string, at least 32 characters (`openssl rand -base64 48`) |
+| `TURSO_DATABASE_URL` | Account sync | `turso db create chatcheat` then `turso db show chatcheat --url` (starts with `libsql://`) |
+| `TURSO_AUTH_TOKEN` | Account sync | `turso db tokens create chatcheat` |
 
-**Cloud AI is opt-in.** When the user ticks "Use cloud AI", chat text goes browser → `/api/analyze` (this app's
-serverless function, which holds the key, validates input, rate-limits and does not log or store content) → Google Gemini.
-On Google's free tier, requests may be used to improve Google products; this is disclosed in the UI.
+Everything is optional. With **no variables** the app still works fully on-device. Features switch on as variables appear:
 
-Local dev: copy `.env.example` to `.env`, set the key, run `npm run dev` (the dev server mounts `/api/analyze`).
-Deploy: Vercel, add `GEMINI_API_KEY`, build `npm run build`, output `dist/`.
+- Sign-in button appears when `GOOGLE_CLIENT_ID` **and** `SESSION_SECRET` are set.
+- Sync needs sign-in **and** both `TURSO_*` variables. Tables are created automatically on first use.
+- Cloud AI needs `GEMINI_API_KEY` (and sign-in, when sign-in is configured).
+
+## Deploy to Vercel
+
+1. Push this repo to GitHub (public) and import it in Vercel. Framework preset: **Vite** (auto-detected; settings come from `vercel.json`).
+2. Add the environment variables above and redeploy.
+3. Add the deployed URL to the Google OAuth client's **Authorized JavaScript origins**.
+4. Open the site, sign in, run the sample chat, and check the Gemini option in the top-bar menu.
+
+`api/` contains only the serverless functions (`auth.ts`, `data.ts`, `analyze.ts`, helpers in `_lib/`). Tests live in `tests/`
+so they are never deployed as functions.
+
+## Local development
+
+```bash
+npm install
+cp .env.example .env     # fill only what you need
+npm run dev              # http://localhost:5173 — the dev server also serves /api/*
+npm test                 # parsers, AI-output validation, rule-based analysis, API security
+npm run lint             # TypeScript type check
+npm run build            # production build
+```
+
+For local sync use your remote `libsql://` Turso URL (the server uses Turso's HTTP client).
+
+## Privacy and security
+
+- Default mode makes **no network request with your chat**. The only traffic is optional: model files (Hugging Face / GitHub, cached after first download) and Google's sign-in script.
+- Cloud AI and sync are **opt-in**, disclosed in the UI, and need Google sign-in. Google's free Gemini tier may use requests to improve its products.
+- API key and database credentials exist only in server environment variables.
+- Sessions: Google ID token verified server-side (signature, issuer, audience, expiry, verified email) → signed, HttpOnly, SameSite=Lax cookie (7 days). State-changing calls also need a custom `X-Requested-With` header (CSRF).
+- Every database query is scoped to the user id from the session and uses bound parameters; tests cover cross-user access, SQL injection, forged cookies and missing CSRF headers (`tests/api/backend.test.ts`).
+- Input validation and size limits on every endpoint, per-user and per-IP rate limits (best-effort per server instance), prompts held server-side so the proxy cannot be used as an open LLM relay, generic error messages, no logging of chat content.
+- Security headers via `vercel.json` (CSP limited to Google sign-in and model hosts, `nosniff`, frame denial, permissions policy).
+- AI output is treated as untrusted: JSON is extracted and validated before use, and the UI renders it through React's escaping.
 
 ## Gen AI services used
-- **Google Gemini API (free tier)** — optional cloud summaries, action items, priorities via `api/analyze.ts`
-- **WebLLM (MLC AI)** — optional in-browser inference (`src/ai/engine.ts`)
-- **Phi-3.5-mini-instruct** (Microsoft, MIT) and **Qwen2.5-1.5B-Instruct** (Alibaba, Apache 2.0) — summaries, action items, priorities (`src/ai/prompts.ts`)
 
-## Tests
-`npm test` — parsers, JSON validation and the rule-based analyzer.
+| Service | Where | Used for |
+|---------|-------|----------|
+| **Google Gemini API** (free tier) | `api/analyze.ts` | Optional cloud summary, action items, priorities |
+| **WebLLM** (MLC AI, Apache 2.0) | `src/ai/engine.ts` | Optional in-browser inference runtime |
+| **Phi-3.5-mini-instruct** (Microsoft, MIT) | via WebLLM | Optional on-device model |
+| **Qwen2.5-1.5B-Instruct** (Alibaba, Apache 2.0) | via WebLLM | Optional lightweight on-device model |
+
+Also used (not Gen AI): **Google Identity Services** (sign-in) and **Turso** (account storage).
+Prompts are documented in [`prompt.md`](prompt.md); architecture details in [`master.md`](master.md).
+
+## Exporting chats
+
+- **WhatsApp:** chat → ⋮ → More → Export chat → Without media → share the `.txt`.
+- **Telegram Desktop:** chat → ⋮ → Export chat history → format *JSON*.
+- **Slack:** export a channel's messages as JSON (array of messages).
+- **Discord:** a DiscordChatExporter text export, or paste messages as `Name: message`.
+
+## Project structure
+
+```
+api/            Vercel serverless functions (auth, data, analyze) + _lib helpers
+tests/api/      Security and API tests (not deployed)
+src/ai/         engine (WebLLM), prompts, JSON validation, rule-based analysis, cloud client
+src/auth/       Google sign-in button and session hook
+src/components/ Layout, composer, engine picker, results views, history, privacy pill
+src/db/         IndexedDB storage (Dexie)
+src/parsers/    WhatsApp, Telegram, Slack, Discord, generic + auto-detect
+```
+
+## Known limits
+
+- Very long chats are cut to the most recent ~24k characters for AI engines (Quick analysis reads everything).
+- On-device models need a WebGPU browser (recent Chrome/Edge) and enough GPU memory.
+- Rate limiting is per serverless instance, so it is a best-effort guard, not a hard quota.
+- Chats imported before signing in are not uploaded automatically; only chats imported while signed in sync.
+
+## License
+
+MIT
