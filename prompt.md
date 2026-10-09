@@ -1,17 +1,43 @@
 # ChatCheat — Prompts, Build Log & Gen AI Usage
 
-This document explains **how ChatCheat was built through prompting** (Part 1) and documents **every prompt the running app sends to an AI model** (Part 2).
+How ChatCheat was built **through prompting**, what each prompt produced and how it was verified, how the result scored, and every prompt the running app sends to an AI model.
 
-- Part 1 — Development prompts: what was asked of the AI coding assistant (Claude Code), what it produced, and how it was verified.
-- Part 2 — Runtime prompts: the prompts inside the product, and which Gen AI service runs them.
+| Section | What it answers |
+|---------|-----------------|
+| [Results](#evaluation-results) | How the project scored, and which prompts drove each criterion |
+| [Gen AI services](#gen-ai-services-submission-requirement-55) | Which AI services are used, where, and for what |
+| [Part 1 — Build log](#part-1--how-it-was-built-development-prompts) | The brief, standing rules, and the prompt-by-prompt log |
+| [Part 2 — Prompt playbook](#part-2--prompt-playbook-what-worked) | Reusable prompt templates, with real examples from this build |
+| [Part 3 — Gaps and next prompts](#part-3--known-gaps-and-the-next-prompts) | Honest limits behind the lowest scores and how to close them |
+| [Part 4 — Runtime prompts](#part-4--runtime-prompts-what-the-product-sends-to-ai-models) | The prompts inside the product |
 
-The code is the source of truth for Part 2: on-device prompts in [`src/ai/prompts.ts`](src/ai/prompts.ts), cloud prompts in [`api/analyze.ts`](api/analyze.ts).
+The code is the source of truth for Part 4: on-device prompts in [`src/ai/prompts.ts`](src/ai/prompts.ts), cloud prompts in [`api/analyze.ts`](api/analyze.ts).
+
+---
+
+## Evaluation results
+
+Scores received for this submission (out of 100):
+
+| Criterion | Score | What drove it (prompts → evidence) |
+|-----------|:-----:|------------------------------------|
+| Innovation & Novelty | **90** | Three interchangeable engines behind one UI: instant rule-based analysis (default, no download), on-device WebLLM models, and opt-in Gemini cloud. Automatic fallback when any AI step fails. Privacy pill always shows where data goes. *Prompts 3–5, 6* |
+| UI / UX & Impact | **88** | Redesign from the reference layout: grouped history, engine picker, centered composer, quick-start cards, sample chat for instant demo, honest notices for every failure. Dark theme chosen by the developer. *Prompts 6, 9, 13* |
+| Code Standards & Quality | **85** | Strict TypeScript; AI output validated (`src/ai/json.ts`); small modules; 62 tests; bugs found by testing with realistic input; docs corrected when found stale. *Prompts 1–3, 10, 13* |
+| Backend & Architecture | **80** | Serverless functions (auth, data, analyze) with a clear trust boundary, per-user composite keys, server-held prompts and secrets. Held back by the gaps in Part 3 (in-memory limits, no live integration test, runtime schema creation). *Prompts 4, 7, 8, 10* |
+| Security & Optimization | **80** | Verified Google ID tokens, HttpOnly session cookie, CSRF header, bound parameters, input limits, CSP, IDOR/injection tests. Held back by the gaps in Part 3 (stateless sessions with no revocation, best-effort rate limits, plaintext chat storage, `unsafe-inline` styles). *Prompts 1, 7, 8, 10* |
+
+Average: **84.6**. The two lowest criteria (80) are exactly the areas Part 3 targets.
+
+> The scores come from the platform's evaluation; they are recorded here as received. Part 3 lists what would plausibly raise them, not a promise of a higher score.
+
+---
 
 ## Gen AI services (Submission Requirement 5/5)
 
 | Service | License / cost | Where | Role |
 |---------|----------------|-------|------|
-| **Claude Code** (Anthropic) | — | Development only | AI pair-programmer that wrote and tested the code from the prompts in Part 1. Not part of the shipped product |
+| **Claude Code** (Anthropic) | — | Development only | AI pair-programmer that wrote and tested the code from the prompts below. Not part of the shipped product |
 | **Google Gemini API** (free tier) | Free via Google AI Studio | `api/analyze.ts` | Optional cloud engine (requires sign-in) |
 | **WebLLM** (MLC AI) | Apache 2.0 | `src/ai/engine.ts` | Runs models in the browser via WebGPU |
 | **Phi-3.5-mini-instruct** (Microsoft) | MIT | via WebLLM | Optional on-device model |
@@ -26,13 +52,13 @@ Data flow: on-device engines never send chat text anywhere; the cloud engine sen
 
 ## The brief
 
-The challenge slide (quoted from the participant's screenshot): **"The Unread Problem — 'What Did I Miss?'"** — build a simple AI micro-app that helps users quickly understand and prioritize important information from overwhelming chat conversations. Suggested focus: summarize long and unread conversations; identify important messages, decisions and action items; prioritize by urgency and relevance; highlight mentions, deadlines and tasks the user may have missed; local-first processing so conversations, data and summaries never leave the device.
+The challenge: **"The Unread Problem — 'What Did I Miss?'"** — build a simple AI micro-app that helps users quickly understand and prioritize important information from overwhelming chat conversations. Suggested focus: summarize long and unread conversations; identify important messages, decisions and action items; prioritize by urgency and relevance; highlight mentions, deadlines and tasks the user may have missed; local-first processing so conversations, data and summaries never leave the device.
 
-Submission requirements: public GitHub repo, deployed link, short description, and a clear statement of which Gen AI services are used and where. Evaluation: code quality, security, efficiency, testing, accessibility, problem-statement alignment.
+Submission requirements: public GitHub repo, deployed link, short description, and a clear statement of which Gen AI services are used and where. Evaluation: code quality, security, efficiency, testing, accessibility, problem-statement alignment (scored as innovation, code standards, UI/UX, backend/architecture, security/optimization).
 
 ## Standing rules given to the assistant
 
-These were set once and applied to every step:
+Set once, applied to every step:
 
 1. **UI/UX:** clean hackathon-quality interface, consistent spacing/typography/states, responsive, no clutter, loading / empty / error / success states, accessibility basics (keyboard, contrast, labels, focus).
 2. **Security first:** no secrets in frontend code; environment variables; server-side authorization; validated input; parameterized queries; protection against SQL injection, XSS, CSRF, IDOR and privilege escalation; rate limiting; secure headers; safe error messages.
@@ -43,39 +69,113 @@ These were set once and applied to every step:
 
 ## Prompt-by-prompt log
 
-Each row is a prompt from the developer, what the assistant did, and the evidence it worked.
-
 | # | Prompt (paraphrased) | What was built / changed | Verification |
 |---|----------------------|--------------------------|--------------|
-| 0 | Challenge screenshots + submission and evaluation slides (starting point) | A project scaffold already existed from an earlier session (Vite + React + TypeScript + Tailwind, chat parsers, WebLLM engine, IndexedDB). Its history was not logged here, so this log starts at the audit | Audit of the existing code against the brief |
-| 1 | "Enforce UI/UX, security, privacy, database and architecture rules" (the standing rules above) | Full audit. Findings: raw `JSON.parse` on model output; errors only in the console; model names in the docs did not match the code (docs said Phi-4 / Qwen3, code loads Phi-3.5 / Qwen2.5); privacy claim "no data leaves" was stronger than reality (model files download); no tests | `npm audit`: 0 vulnerabilities; no `fetch`/analytics found in `src/` |
-| 2 | (same) | `src/ai/json.ts`: extract and validate model JSON, coerce to safe defaults, truncate long chats; visible error banners; honest model names and privacy text; security headers in `vercel.json` | 8 unit tests |
-| 3 | "Make it work seamlessly, build whatever is required, push, tell me the env variables" | Parser tests on real export samples exposed two bugs: messages saved without a conversation id (history reopened empty) and fixed ids that overwrote the next import. Fixed storage. Added a rule-based analyzer (`src/ai/heuristics.ts`) so the app works with no model and no WebGPU, a built-in sample chat, and a delete-all-data button | 18 tests; sample chat verified in the browser |
-| 4 | "Can we use API calls? I cannot download such heavy files" | `api/analyze.ts` — Gemini proxy as a serverless function: key stays server-side, prompts held server-side (not an open relay), validation, size cap, rate limit, generic errors; opt-in with explicit consent text | Mocked-upstream tests incl. "key never in the URL" |
-| 5 | "Make sure I use a free API" | Confirmed Gemini free tier via AI Studio; model fallback list; disclosed that free-tier requests may be used by Google to improve products | Fallback tests (404/429 move on, auth errors do not) |
-| 6 | Cognivo-style design screenshot; "build it like this; I will attach Google and Turso" | Full UI redesign: sidebar with grouped history, top-bar engine picker, centered welcome + large composer, quick-start cards, privacy pill | Browser check of welcome and results views |
-| 7 | "Google auth" (clarifying that sign-in is Google) | `api/auth.ts`: Google ID-token verification (signature, issuer, audience, expiry, verified email) → HttpOnly session cookie; CSRF header; Google button component | Tests with a locally signed token: wrong audience / issuer / unverified email rejected |
-| 8 | (same) Turso storage | `api/data.ts` + `api/_lib/db.ts`: per-user conversation sync, composite primary key, session-scoped bound-parameter queries; cloud AI requires sign-in | IDOR, SQL-injection, forged-cookie and CSRF tests; live dev-server check of 401 / 403 responses |
-| 9 | "Prefer dark tone" | Kept a dark theme with the reference's layout and orange accent; noted the decision in `design.md` | — |
-| 10 | "It's not hosting on Vercel — check the issues, list the env variables, check README / prompt.md / master.md" | Moved tests out of `api/` (Vercel deploys every file there as a function), switched to the HTTP libSQL client, added `api/tsconfig.json` for Node ESM, set a 30 s function timeout. Compiled the functions as Vercel does and loaded them under plain Node ESM. Rewrote README and master.md (the earlier README update had silently not run; this was caught and corrected) | Build, 56 tests, functions load under Node ESM |
-| 11 | "Which email did I use / I want it on my Gmail / make me a database" | Assistant cannot sign in or create accounts, so it provided `db/schema.sql`, `scripts/init-db.mjs` (`npm run db:init`) and step-by-step setup; a test keeps the schema file identical to the one the app creates | Schema drift test |
-| 12 | Screenshot: Google `origin_mismatch` | Diagnosed as a missing Authorized JavaScript origin for the deployed URL (configuration, not code) and gave the exact fix | — |
-| 13 | Screenshot: wrong participants + "AI action-item extraction failed"; "why did it happen?" | Parser bug: the fallback regex let any text before a colon become a sender. Rewrote it to require name-like speakers and to treat non-chat text as one block. Cloud errors now report a safe, specific reason (key rejected, quota, unavailable) instead of a generic message | New regression tests using the exact text from the screenshot; 62 tests |
-| 14 | "Maintain prompt.md in a better way to explain what has been done by prompting" | This document | — |
+| 0 | Challenge slides + submission and evaluation slides | A scaffold already existed from an earlier session (Vite + React + TypeScript + Tailwind, chat parsers, WebLLM engine, IndexedDB). That history was not logged, so this log starts at the audit | Audit of the code against the brief |
+| 1 | "Enforce UI/UX, security, privacy, database and architecture rules" | Full audit. Findings: raw `JSON.parse` on model output; errors only in the console; docs named models the code did not load; privacy claim stronger than reality (model files download); no tests | `npm audit`: 0 vulnerabilities; no `fetch`/analytics in `src/` |
+| 2 | (same) | `src/ai/json.ts` extract + validate model JSON, truncate long chats; visible error banners; honest model names and privacy text; security headers | 8 unit tests |
+| 3 | "Make it work seamlessly, build whatever is required, push, tell me the env variables" | Parser tests on realistic exports exposed two bugs (messages stored without a conversation id so history reopened empty; fixed ids overwrote the next import). Added a rule-based analyzer so the app works with no model and no WebGPU, a built-in sample chat, and a delete-all-data button | 18 tests; sample chat checked in the browser |
+| 4 | "Can we use API calls? I cannot download such heavy files" | `api/analyze.ts`: Gemini proxy as a serverless function. Key and prompts stay server-side (not an open relay), validation, size cap, rate limit, generic errors; opt-in with consent text | Mocked-upstream tests incl. "key never in the URL" |
+| 5 | "Make sure I use a free API" | Confirmed the Gemini free tier via AI Studio; model fallback list; disclosed that free-tier requests may be used by Google | Fallback tests (404/429 move on, auth errors do not) |
+| 6 | Reference design screenshot; "build it like this; I will attach Google and Turso" | Full UI redesign: grouped history, top-bar engine picker, centered welcome + composer, quick-start cards, privacy pill | Browser check of welcome and results views |
+| 7 | "Google auth" | `api/auth.ts`: Google ID-token verification (signature, issuer, audience, expiry, verified email) → HttpOnly session cookie; CSRF header; Google button | Tests with a locally signed token: wrong audience / issuer / unverified email rejected |
+| 8 | (same) Turso storage | `api/data.ts` + `api/_lib/db.ts`: per-user sync, composite primary key, session-scoped bound-parameter queries; cloud AI requires sign-in | IDOR, SQL-injection, forged-cookie and CSRF tests; live dev-server check of 401 / 403 |
+| 9 | "Prefer dark tone" | Dark theme with the reference layout and an orange accent; decision recorded in `design.md` | — |
+| 10 | "Not hosting on Vercel; check issues, list env variables, check README / prompt.md / master.md" | Moved tests out of `api/` (Vercel deploys every file there), HTTP libSQL client, `api/tsconfig.json` for Node ESM, 30 s function timeout; compiled the functions as Vercel does and loaded them under Node ESM. Rewrote README and master.md (an earlier README update had silently not run; caught and corrected) | Build, tests, functions load under Node ESM |
+| 11 | "Which email did I use / I want it on my Gmail / make me a database" | The assistant cannot sign in or create accounts, so it provided `db/schema.sql`, `npm run db:init`, and step-by-step setup; a test keeps the schema file identical to the one the app creates | Schema drift test |
+| 12 | Screenshot: Google `origin_mismatch` | Diagnosed as a missing Authorized JavaScript origin for the deployed URL (configuration, not code); exact fix given | — |
+| 13 | Screenshot: wrong participants + "AI action-item extraction failed"; "why did it happen?" | Parser bug: the fallback regex let any text before a colon become a sender. Rewrote it to require name-like speakers and to treat non-chat text as one block. Cloud errors now report a safe, specific reason (key rejected / quota / unavailable) | Regression tests using the exact screenshot text; 62 tests |
+| 14 | "Demo env, I'll add the key" | `.env` template (gitignored) with per-variable instructions; clarified that Vercel needs the key in its own settings | — |
+| 15 | Screenshot of evaluation scores; "make prompt.md better" | This document: results, criterion mapping, playbook, gaps and next prompts | — |
 
 ## Lessons recorded from the process
 
-- **Claims were checked, not assumed:** a docs update that silently failed was found by re-reading the file and corrected; claimed behavior was verified in a running browser or with tests where possible.
-- **Real-input testing mattered:** both parser bugs (storage ids, speaker detection) were found by testing with realistic exports, not by reading the code.
+- **Claims were checked, not assumed:** a docs update that silently failed was found by re-reading the file and corrected; behavior was verified in a running browser or with tests where possible.
+- **Real-input testing mattered:** both parser bugs (storage ids, speaker detection) were found with realistic inputs, not by reading the code.
+- **Screenshots are the best bug reports:** the two most useful prompts (#12, #13) were screenshots of the actual failure; each led to a root cause rather than a guess.
 - **What could not be verified:** a real Google login and a real Turso database were not available to the assistant, so those paths are covered by tests with stand-ins (a locally signed token, an in-memory libSQL database) rather than live runs.
-
-## Reproducing the build
-
-Give an AI coding assistant the brief and standing rules above, then the prompts in the table in order. The resulting code should match this repository's structure (see `master.md`).
 
 ---
 
-# Part 2 — Runtime prompts (what the product sends to AI models)
+# Part 2 — Prompt playbook (what worked)
+
+Templates distilled from this build. Replace the angle-bracket parts.
+
+**1. Audit before building**
+```
+Audit <repo path> against <brief / rubric>. For each finding give: file:line, why it matters, how to
+reproduce, and the smallest fix. Do not change code yet. Rank by impact on <criteria>.
+```
+*Used in #1. Result: it caught unvalidated AI output and misleading docs before any new feature was added.*
+
+**2. Feature with guardrails**
+```
+Add <feature>. Constraints: <security / privacy rules>. Prefer the simplest design that satisfies them.
+List every new data flow (what leaves the device, where it goes, who can read it) before coding.
+Add tests for the failure and abuse cases, not only the happy path.
+```
+*Used in #4, #7, #8. Result: the key-in-header test, the cross-user (IDOR) test and the forged-cookie test.*
+
+**3. Bug report from a screenshot**
+```
+<screenshot> This is what I see. Find the root cause (not a workaround), explain in plain words why it
+happened, fix it, and add a regression test using the exact input from the screenshot.
+```
+*Used in #13. Result: the speaker-detection rewrite and a test with the exact notice text.*
+
+**4. Verify before claiming**
+```
+Before saying it works: run the type check, tests and build; run the app and exercise the real flow;
+state what was NOT verified and why. If a step silently failed earlier, say so.
+```
+*Used throughout. Result: the stale-README catch and the honest "not tested live" notes.*
+
+**5. Deploy diagnosis**
+```
+It fails on <platform>. Reproduce the platform's build/runtime rules locally (module format, function
+discovery, timeouts, native modules). Fix what you can prove; list what needs my dashboard/logs.
+```
+*Used in #10. Result: tests moved out of `api/`, HTTP libSQL client, Node ESM check.*
+
+**6. Docs that match the code**
+```
+Rewrite <doc> from the current code. Every claim must be true today; remove anything stale; add exact
+setup steps and where each value comes from. Flag anything you could not confirm.
+```
+*Used in #10 and #15.*
+
+---
+
+# Part 3 — Known gaps and the next prompts
+
+These are real limits of the current build, behind the two 80 scores. They are listed so the next iteration can target them; none is claimed as done.
+
+## Backend & Architecture (80)
+
+| Gap | Why it costs points | Next prompt |
+|-----|--------------------|-------------|
+| Rate limits are in memory per serverless instance | Not a hard quota; resets on cold start | "Move rate limiting to Turso (or Upstash) with an atomic counter keyed by user and IP; add a test that two instances share the limit" |
+| Tables are created at runtime on first request | Migration safety; no version history | "Add numbered migrations in `db/migrations`, a `schema_version` table, and run them from `npm run db:init` instead of at request time" |
+| No integration test against real Turso or real Google keys | Only stand-ins are tested | "Add an opt-in integration suite that runs against a Turso test database when `TURSO_TEST_URL` is set; run it in CI" |
+| No CI pipeline | Regressions only caught locally | "Add a GitHub Actions workflow: install, type check, test, build on every push" |
+| Whole conversation stored as one JSON blob | Cannot query or page messages | "Normalize messages into a `messages` table with an index; keep the blob only for results" |
+
+## Security & Optimization (80)
+
+| Gap | Why it costs points | Next prompt |
+|-----|--------------------|-------------|
+| Sessions are stateless JWTs; logout only clears the cookie | A stolen cookie stays valid up to 7 days | "Add a `sessions` table with a token id; check it on every request; delete it on logout; add a test that a logged-out token is rejected" |
+| CSP allows `style-src 'unsafe-inline'` | Weakens XSS protection | "Remove inline styles or add nonces, then tighten the CSP and re-verify the Google button still renders" |
+| Chat text stored unencrypted in Turso | Database access exposes message content | "Encrypt `messages_json` with a per-user key (AES-GCM) using a server secret; document key rotation" |
+| No audit trail for sensitive actions | Cannot trace deletes or sign-ins | "Log sign-in, delete-all and export events (user id, time, IP hash) to an `audit_log` table; never log chat content" |
+| No retention or export controls | Privacy hygiene | "Add 'export my data' (JSON download) and an auto-delete after N days setting" |
+| Model weights loaded on the main thread; no bundle splitting | Heavier first load | "Run WebLLM in the existing worker, lazy-load the engine only when a model is picked, and split the bundle" |
+
+Suggested order for the best return: sessions table → CI → rate limits in the database → CSP tightening → migrations.
+
+---
+
+# Part 4 — Runtime prompts (what the product sends to AI models)
 
 ## Design rules for all runtime prompts
 
