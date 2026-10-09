@@ -63,7 +63,7 @@ export default function App() {
 
   // Show the first failure reason; later steps of the same run must not overwrite it.
   const keepFirstError = useCallback(
-    (text: string) => setNotice((n) => (n?.kind === 'error' ? n : { kind: 'error', text })),
+    (text: string) => text && setNotice((n) => (n?.kind === 'error' ? n : { kind: 'error', text })),
     [],
   );
 
@@ -126,18 +126,18 @@ export default function App() {
       }
 
       setIsSummarizing(true);
-      const s = await runTask('summary', engine, conv, chat.text);
-      setSummary(s.value);
-      setIsSummarizing(false);
-      if (s.error) keepFirstError(s.error);
-      await db.saveSummary(conv.id, s.value);
-
       setIsExtractingActions(true);
-      const a = await runTask('actions', engine, conv, chat.text);
+      const summaryTask = () => runTask('summary', engine, conv, chat.text);
+      const actionsTask = () => runTask('actions', engine, conv, chat.text);
+      // Cloud requests are independent, so run them together; an on-device model handles one at a time.
+      const [s, a] =
+        engine === 'cloud' ? await Promise.all([summaryTask(), actionsTask()]) : [await summaryTask(), await actionsTask()];
+      setSummary(s.value);
       setActionItems(a.value);
+      setIsSummarizing(false);
       setIsExtractingActions(false);
-      if (a.error) keepFirstError(a.error);
-      await db.saveActionItems(conv.id, a.value);
+      keepFirstError(s.error ?? a.error ?? '');
+      await Promise.all([db.saveSummary(conv.id, s.value), db.saveActionItems(conv.id, a.value)]);
 
       return { s: s.value, a: a.value };
     },

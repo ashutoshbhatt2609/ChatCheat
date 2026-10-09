@@ -59,7 +59,7 @@ describe('free model discovery', () => {
     ];
     const ids = rankFreeModels(noDeepseek);
     expect(ids).not.toContain('deepseek/deepseek-v4-flash');
-    expect(ids[0]).toMatch(/gemma|nemotron/);
+    expect(ids[0]).toMatch(/gemma|nemotron-3-super/);
     expect(ids[ids.length - 1]).toBe('openrouter/free');
   });
   it('falls back to the router alone when discovery fails, and caches success', async () => {
@@ -95,6 +95,22 @@ describe('chatCompletion', () => {
       .rejects.toBeInstanceOf(UpstreamError);
     const g = vi.fn().mockResolvedValue(completion('<think>only thoughts</think>'));
     await expect(chatCompletion({ baseUrl: 'https://x', apiKey: 'k', model: 'm', system: 's', user: 'u' }, g as never)).rejects.toThrow();
+  });
+});
+
+describe('timeouts', () => {
+  const opts = { baseUrl: 'https://x', apiKey: 'k', model: 'm', system: 's', user: 'u' };
+  it('turns a slow model into a 504 so the next model can be tried', async () => {
+    const slow = vi.fn().mockRejectedValue(Object.assign(new Error('timed out'), { name: 'TimeoutError' }));
+    await expect(chatCompletion(opts, slow as never)).rejects.toMatchObject({ status: 504 });
+    expect(upstreamMessage(new UpstreamError(504))).toMatch(/too long/);
+  });
+  it('firstWorking continues after a 504 and stops once the deadline has passed', async () => {
+    const fn = vi.fn().mockRejectedValueOnce(new UpstreamError(504)).mockResolvedValueOnce('ok');
+    expect(await firstWorking(['a', 'b'], fn)).toBe('ok');
+    const late = vi.fn().mockResolvedValue('never');
+    await expect(firstWorking(['a'], late, Date.now() - 1)).rejects.toThrow();
+    expect(late).not.toHaveBeenCalled();
   });
 });
 

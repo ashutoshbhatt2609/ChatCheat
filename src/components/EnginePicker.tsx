@@ -91,7 +91,7 @@ export const EnginePicker: React.FC<EnginePickerProps> = (props) => {
                 <span className="block text-sm text-zinc-100">{cloudLabel} AI</span>
                 <span className="block text-xs text-zinc-400">
                   {cloudUsable
-                    ? `Best quality, no download. Sends chat text to ${cloudLabel} through this app’s server. Free AI services may log or reuse requests, so avoid sensitive chats.`
+                    ? `Best quality, no download. Sends chat text to ${cloudLabel} through this app’s server. Free AI services may log, train on or even publish requests, so never use it for private chats.`
                     : 'Sign in with Google to use cloud AI.'}
                 </span>
               </span>

@@ -21,8 +21,11 @@ export async function cloudComplete(task: CloudTask, chat: string, username?: st
   const r = await apiFetch('/api/analyze', {
     method: 'POST',
     body: JSON.stringify({ task, chat, username }),
+    signal: AbortSignal.timeout(55_000),
+  }).catch((e: unknown) => {
+    throw (e as { name?: string })?.name === 'TimeoutError' ? new Error('Cloud AI took too long to answer.') : e;
   });
   const data = (await r.json().catch(() => ({}))) as { text?: string; error?: string };
-  if (!r.ok || !data.text) throw new Error(data.error || 'Cloud AI request failed.');
+  if (!r.ok || !data.text) throw new Error(data.error || `Cloud AI request failed (HTTP ${r.status}).`);
   return data.text;
 }

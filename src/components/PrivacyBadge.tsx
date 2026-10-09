@@ -46,7 +46,7 @@ export const PrivacyBadge: React.FC<PrivacyBadgeProps> = ({ cloudAi, cloudLabel,
             <li>Quick analysis and on-device models run entirely in your browser.</li>
             <li>
               Cloud AI ({cloudLabel}) is only used when selected: chat text goes to that provider through this app&apos;s
-              server, which does not store it. Free AI services may log or reuse requests.
+              server, which does not store it. Free AI services may log, train on or even publish requests.
             </li>
             <li>
               Signing in with Google is optional. When signed in, new chats and their results are stored in your

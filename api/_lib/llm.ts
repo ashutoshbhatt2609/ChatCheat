@@ -48,6 +48,7 @@ export function upstreamMessage(e: unknown): string {
       return 'Cloud AI model not available. With OpenRouter free models, enable free endpoints at openrouter.ai/settings/privacy, or set LLM_MODEL to a model your key can use.';
     }
     if (e.status === 429) return 'Cloud AI is busy or the free limit is used up. Wait a minute and try again.';
+    if (e.status === 504) return 'The free AI models took too long to answer. Try again; free models can be slow at busy times.';
     if (e.status >= 500) return 'The AI provider is temporarily unavailable. Try again shortly.';
   }
     return 'The AI service could not process this request.';
@@ -67,11 +68,14 @@ export interface ChatOptions {
   /** Ask the provider for strict JSON (DeepSeek supports it; free OpenRouter models may not). */
   json?: boolean;
   headers?: Record<string, string>;
+  /** Abort a slow model after this long so the next one can be tried (default 14 s). */
+  timeoutMs?: number;
 }
 
 /** One OpenAI-compatible chat completion. Returns the assistant text. */
 export async function chatCompletion(o: ChatOptions, fetchImpl: typeof fetch = fetch): Promise<string> {
   const resp = await fetchImpl(`${o.baseUrl}/chat/completions`, {
+    signal: AbortSignal.timeout(o.timeoutMs ?? 14_000),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${o.apiKey}`, ...o.headers },
     body: JSON.stringify({
@@ -84,6 +88,9 @@ export async function chatCompletion(o: ChatOptions, fetchImpl: typeof fetch = f
       max_tokens: 2048,
       ...(o.json ? { response_format: { type: 'json_object' } } : {}),
     }),
+  }).catch((e: unknown) => {
+    const name = (e as { name?: string })?.name;
+    throw name === 'TimeoutError' || name === 'AbortError' ? new UpstreamError(504) : e;
   });
   if (!resp.ok) throw new UpstreamError(resp.status);
   const data = (await resp.json()) as { choices?: { message?: { content?: string } }[] };
@@ -108,7 +115,7 @@ let cache: { at: number; ids: string[] } | null = null;
 // Not general chat models: safety classifiers, media, vision/omni, embeddings, code-only.
 const UNSUITED = /safety|guard|lyria|embed|vision|omni|image|audio|code/i;
 const REASONING = /r1|reason|think/i;
-const PREFERRED = /gemma|llama|qwen|mistral|nemotron-3-(super|ultra)/i;
+const PREFERRED = /gemma|llama|qwen|mistral|nemotron-3-super/i;
 
 /**
  * Free text models, best first: free DeepSeek (if one exists), then well-known instruct families,
@@ -145,15 +152,23 @@ export function resetModelCacheForTests(): void {
   cache = null;
 }
 
-/** Try models in order; move on only for missing / rate-limited / unavailable models. */
-export async function firstWorking<T>(models: string[], fn: (model: string) => Promise<T>): Promise<T> {
+/**
+ * Try models in order; move on only for missing / rate-limited / unavailable / slow models.
+ * `deadline` (epoch ms) stops new attempts so the function can still answer before the platform kills it.
+ */
+export async function firstWorking<T>(
+  models: string[],
+  fn: (model: string) => Promise<T>,
+  deadline = Infinity,
+): Promise<T> {
   let last: unknown = new Error('no model to try');
   for (const m of models) {
+    if (Date.now() > deadline) break;
     try {
       return await fn(m);
     } catch (e) {
       last = e;
-      if (!(e instanceof UpstreamError) || ![404, 429, 503].includes(e.status)) throw e;
+      if (!(e instanceof UpstreamError) || ![404, 429, 503, 504].includes(e.status)) throw e;
     }
   }
   throw last;

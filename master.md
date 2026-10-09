@@ -9,8 +9,8 @@ Complete project overview, architecture and reference. Last updated: 9 October 2
 | Project | ChatCheat — "What Did I Miss?" |
 | Challenge | The Unread Problem: summarize long chats, surface decisions and action items, prioritize by urgency and relevance, highlight mentions and deadlines |
 | Approach | Local-first. Default analysis runs in the browser; cloud AI and account sync are opt-in |
-| Stack | React 18, Vite 6, TypeScript (strict), Tailwind 3, WebLLM, Dexie (IndexedDB), Vercel serverless functions, Turso (libSQL), Google Sign-In, cloud LLM (DeepSeek via OpenRouter / DeepSeek / Gemini) |
-| Cost | $0 (free tiers: OpenRouter free DeepSeek models, Turso, Vercel hobby) |
+| Stack | React 18, Vite 6, TypeScript (strict), Tailwind 3, WebLLM, Dexie (IndexedDB), Vercel serverless functions, Turso (libSQL), Google Sign-In, cloud LLM (OpenRouter free models / DeepSeek / Gemini) |
+| Cost | $0 (free tiers: OpenRouter free models, Turso, Vercel hobby) |
 
 ## Architecture
 
@@ -29,7 +29,7 @@ Complete project overview, architecture and reference. Last updated: 9 October 2
                           Vercel functions (Node ESM, TypeScript)
                           auth.ts: verify Google ID token → HttpOnly cookie
                           data.ts: per-user CRUD ───────────► Turso
-                          analyze.ts: auth + validation + rate limit ─► DeepSeek / Gemini
+                          analyze.ts: auth + validation + rate limit ─► OpenRouter / DeepSeek / Gemini
 ```
 
 ### Trust boundaries
@@ -52,7 +52,7 @@ Complete project overview, architecture and reference. Last updated: 9 October 2
 
 | Variable | Enables | Source |
 |----------|---------|--------|
-| `OPENROUTER_API_KEY` | Cloud AI, free DeepSeek | https://openrouter.ai/keys (free) |
+| `OPENROUTER_API_KEY` | Cloud AI, free models | https://openrouter.ai/keys (free; enable free endpoints in privacy settings) |
 | `DEEPSEEK_API_KEY` | Cloud AI, DeepSeek direct | https://platform.deepseek.com (paid balance, not free) |
 | `GEMINI_API_KEY` | Cloud AI, Gemini | https://aistudio.google.com/apikey (free) |
 | `LLM_PROVIDER`, `LLM_MODEL` | Optional overrides | — |
@@ -118,7 +118,7 @@ Local device storage (IndexedDB via Dexie) holds `conversations`, `messages`, `s
 
 | # | Service | Where | Use |
 |---|---------|-------|-----|
-| 1 | DeepSeek models via OpenRouter free tier (or DeepSeek API / Gemini with your own key) | `api/analyze.ts`, `api/_lib/llm.ts` | Optional cloud summaries, action items, priorities |
+| 1 | Free models via OpenRouter (or DeepSeek API / Gemini with your own key) | `api/analyze.ts`, `api/_lib/llm.ts` | Optional cloud summaries, action items, priorities |
 | 2 | WebLLM (MLC AI) | `src/ai/engine.ts` | In-browser inference runtime |
 | 3 | Phi-3.5-mini-instruct (Microsoft, MIT) | via WebLLM | Optional on-device model |
 | 4 | Qwen2.5-1.5B-Instruct (Alibaba, Apache 2.0) | via WebLLM | Optional lighter on-device model |
@@ -137,7 +137,8 @@ src/
   App.tsx                          orchestration
   api.ts, cloudSync.ts             fetch helpers, account sync client
   auth/                            GoogleButton.tsx, useAuth.ts
-  ai/                              engine.ts, prompts.ts, json.ts, heuristics.ts, cloud.ts, worker.ts
+  ai/                              engine.ts, prompts.ts, json.ts, heuristics.ts, cloud.ts, run.ts (task runner)
+  hooks/useDismiss.ts              shared outside-click / Escape handling for menus
   components/                      Layout, ChatImport, EnginePicker, PrivacyBadge, SummaryView,
                                    ActionItems, PriorityFilter, ConversationHistory
   db/index.ts                      Dexie schema

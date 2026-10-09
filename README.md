@@ -93,7 +93,7 @@ For local sync use your remote `libsql://` Turso URL (the server uses Turso's HT
 ## Privacy and security
 
 - Default mode makes **no network request with your chat**. The only traffic is optional: model files (Hugging Face / GitHub, cached after first download) and Google's sign-in script.
-- Cloud AI and sync are **opt-in**, disclosed in the UI, and need Google sign-in. Free AI services (OpenRouter free models, DeepSeek, Gemini free tier) may log or reuse requests, so avoid sensitive chats in cloud mode.
+- Cloud AI and sync are **opt-in**, disclosed in the UI, and need Google sign-in. Free AI services (OpenRouter free models, Gemini free tier) may log, train on or even publish requests (OpenRouter's "free endpoints that publish prompts" setting), so never use cloud mode for private chats.
 - API key and database credentials exist only in server environment variables.
 - Sessions: Google ID token verified server-side (signature, issuer, audience, expiry, verified email) → signed, HttpOnly, SameSite=Lax cookie (7 days). State-changing calls also need a custom `X-Requested-With` header (CSRF).
 - Every database query is scoped to the user id from the session and uses bound parameters; tests cover cross-user access, SQL injection, forged cookies and missing CSRF headers (`tests/api/backend.test.ts`).

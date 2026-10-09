@@ -127,6 +127,7 @@ export async function runProvider(
         { ...base, model, baseUrl: 'https://openrouter.ai/api/v1', apiKey: env.OPENROUTER_API_KEY as string, headers: { 'X-Title': 'ChatCheat' } },
         fetchImpl,
       ),
+      Date.now() + 40_000,
     );
   }
   if (provider === 'deepseek') {
