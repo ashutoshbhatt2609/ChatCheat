@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import handler, { validate, callGemini, callWithFallback, rateLimited } from './analyze';
+import handler, { validate, callGemini, callWithFallback, rateLimited } from '../../api/analyze';
 
 describe('validate', () => {
   it('accepts a good request', () => {

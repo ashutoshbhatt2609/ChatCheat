@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createClient } from '@libsql/client';
 import { generateKeyPair, SignJWT, exportJWK, createLocalJWKSet } from 'jose';
-import { setDbForTests } from './_lib/db';
-import { createSessionToken, verifyGoogleIdToken, COOKIE } from './_lib/session';
-import { limited, csrfOk } from './_lib/http';
-import auth from './auth';
-import data, { validatePayload } from './data';
-import analyze from './analyze';
+import { setDbForTests } from '../../api/_lib/db';
+import { createSessionToken, verifyGoogleIdToken, COOKIE } from '../../api/_lib/session';
+import { limited, csrfOk } from '../../api/_lib/http';
+import auth from '../../api/auth';
+import data, { validatePayload } from '../../api/data';
+import analyze from '../../api/analyze';
 
 process.env.SESSION_SECRET = 'x'.repeat(40);
 process.env.GOOGLE_CLIENT_ID = 'client-123';
@@ -39,7 +39,7 @@ beforeEach(async () => {
   const db = createClient({ url: ':memory:' });
   setDbForTests(db);
   for (const u of [alice, bob]) {
-    await (await import('./_lib/db')).ensureSchema(db);
+    await (await import('../../api/_lib/db')).ensureSchema(db);
     await db.execute({ sql: 'INSERT INTO users (id,email,name,picture,created_at) VALUES (?,?,?,?,0)', args: [u.id, u.email, u.name, u.picture] });
   }
 });

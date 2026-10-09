@@ -19,6 +19,6 @@
     "resolveJsonModule": true,
     "esModuleInterop": true
   },
-  "include": ["src", "api"],
+  "include": ["src", "api", "tests"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
