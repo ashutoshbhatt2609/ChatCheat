@@ -1,3 +1,5 @@
+> **Decision (owner): ChatCheat keeps its dark theme.** The light/lime palette below is superseded; the layout and interaction guidance still apply.
+
 # ChatCheat — Product Design Specification
 
 ## 1. Purpose

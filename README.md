@@ -225,14 +225,24 @@ MIT License — free to use, modify, and distribute.
 
 ## Environment variables
 
-**None required.** ChatCheat is a static, browser-only app: no API keys, no backend, no database server.
-Build/deploy: `npm install && npm run build` → serve `dist/` (Vercel config included in `vercel.json`).
-The only network traffic is the one-time download of open-source model weights (Hugging Face) and
-WebLLM runtime files (GitHub) when a user picks a model; chat content is never uploaded.
-If no model is loaded (e.g. no WebGPU), a rule-based analyzer runs locally instead.
+| Name | Required | Where | Purpose |
+|------|----------|-------|---------|
+| `GEMINI_API_KEY` | Optional (enables cloud AI) | Server only (Vercel project settings / local `.env`) | Free key from https://aistudio.google.com/apikey |
+| `GEMINI_MODEL` | Optional | Server only | Override model; default tries `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.0-flash` |
+
+Never prefix these with `VITE_` — they must stay on the server. Without a key the app still works:
+the cloud toggle is hidden and the on-device rule-based analyzer (or an optional local WebLLM model) is used.
+
+**Cloud AI is opt-in.** When the user ticks "Use cloud AI", chat text goes browser → `/api/analyze` (this app's
+serverless function, which holds the key, validates input, rate-limits and does not log or store content) → Google Gemini.
+On Google's free tier, requests may be used to improve Google products; this is disclosed in the UI.
+
+Local dev: copy `.env.example` to `.env`, set the key, run `npm run dev` (the dev server mounts `/api/analyze`).
+Deploy: Vercel, add `GEMINI_API_KEY`, build `npm run build`, output `dist/`.
 
 ## Gen AI services used
-- **WebLLM (MLC AI)** — in-browser inference (`src/ai/engine.ts`)
+- **Google Gemini API (free tier)** — optional cloud summaries, action items, priorities via `api/analyze.ts`
+- **WebLLM (MLC AI)** — optional in-browser inference (`src/ai/engine.ts`)
 - **Phi-3.5-mini-instruct** (Microsoft, MIT) and **Qwen2.5-1.5B-Instruct** (Alibaba, Apache 2.0) — summaries, action items, priorities (`src/ai/prompts.ts`)
 
 ## Tests

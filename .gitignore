@@ -29,3 +29,4 @@ vite.config.js
 vite.config.d.ts
 vite.config.d.ts.map
 .claude/
+!.env.example

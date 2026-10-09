@@ -12,7 +12,8 @@ import { buildSummaryMessages, buildActionItemMessages, buildPriorityMessages } 
 import { db, type StoredConversation } from './db';
 import type { ParsedConversation } from './parsers/types';
 import { heuristicSummary, heuristicActionItems, heuristicPriorities } from './ai/heuristics';
-import { SAMPLE_CHAT } from './sampleChat';
+import { CloudToggle } from './components/CloudToggle';
+import { cloudComplete, isCloudAvailable } from './ai/cloud';
 import {
   parseSummary,
   parseActionItems,
@@ -36,6 +37,10 @@ export default function App() {
   });
   const [currentModel, setCurrentModel] = useState<string | null>(null);
 
+  // --- Cloud AI (opt-in; sends chat text to Gemini via /api/analyze) ---
+  const [cloudAvailable, setCloudAvailable] = useState(false);
+  const [cloudEnabled, setCloudEnabled] = useState(false);
+
   // --- Conversation State ---
   const [conversations, setConversations] = useState<StoredConversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<ParsedConversation | null>(null);
@@ -57,6 +62,7 @@ export default function App() {
   // --- Load conversation history from IndexedDB on mount ---
   useEffect(() => {
     db.getAllConversations().then(setConversations).catch(console.error);
+    isCloudAvailable().then(setCloudAvailable);
   }, []);
 
   // --- Model Loading ---
@@ -99,14 +105,14 @@ export default function App() {
   // --- Run AI Analysis ---
   const runAnalysis = useCallback(
     async (conv: ParsedConversation) => {
-      if (!aiEngine.isReady()) {
+      if (!cloudEnabled && !aiEngine.isReady()) {
         const s = heuristicSummary(conv);
         const a = heuristicActionItems(conv);
         setSummary(s);
         setActionItems(a);
         await db.saveSummary(conv.id, s);
         await db.saveActionItems(conv.id, a);
-        setNotice({ kind: 'info', text: 'Quick analysis (rule-based). Load an AI model above for deeper, AI-written summaries.' });
+        setNotice({ kind: 'info', text: 'Quick analysis (rule-based, on-device). Enable cloud AI or load a model for AI-written summaries.' });
         return;
       }
 
@@ -115,41 +121,47 @@ export default function App() {
       // Run summarization
       setIsSummarizing(true);
       try {
-        const summaryMessages = buildSummaryMessages(chatText);
-        const summaryResult = await aiEngine.complete(summaryMessages);
+        const summaryResult = cloudEnabled
+          ? await cloudComplete('summary', chatText)
+          : await aiEngine.complete(buildSummaryMessages(chatText));
         const parsed: SummaryData = parseSummary(summaryResult);
         setSummary(parsed);
         await db.saveSummary(conv.id, parsed);
       } catch (err) {
         console.error('Summary failed:', err);
-        setSummary(null);
-        setNotice({ kind: 'error', text: 'The model returned an unreadable summary. Try again or switch to the other model.' });
+        const s = heuristicSummary(conv);
+        setSummary(s);
+        setNotice({
+          kind: 'error',
+          text: (cloudEnabled && err instanceof Error ? err.message + ' ' : 'The AI returned an unreadable summary. ') + 'Showing a quick rule-based analysis instead.',
+        });
       }
       setIsSummarizing(false);
 
       // Run action item extraction
       setIsExtractingActions(true);
       try {
-        const actionMessages = buildActionItemMessages(chatText);
-        const actionResult = await aiEngine.complete(actionMessages);
+        const actionResult = cloudEnabled
+          ? await cloudComplete('actions', chatText)
+          : await aiEngine.complete(buildActionItemMessages(chatText));
         const parsed: ActionItem[] = parseActionItems(actionResult);
         setActionItems(parsed);
         await db.saveActionItems(conv.id, parsed);
       } catch (err) {
         console.error('Action items failed:', err);
-        setActionItems([]);
-        setNotice({ kind: 'error', text: 'Could not extract action items from the model output.' });
+        setActionItems(heuristicActionItems(conv));
+        setNotice({ kind: 'error', text: 'AI action-item extraction failed; showing rule-based results.' });
       }
       setIsExtractingActions(false);
     },
-    [prepareChatText],
+    [prepareChatText, cloudEnabled],
   );
 
   // --- Run Priority Analysis (triggered when username changes) ---
   const runPriorityAnalysis = useCallback(
     async (conv: ParsedConversation, name: string) => {
       if (!name.trim()) return;
-      if (!aiEngine.isReady()) {
+      if (!cloudEnabled && !aiEngine.isReady()) {
         setPriorities(heuristicPriorities(conv, name));
         return;
       }
@@ -157,18 +169,19 @@ export default function App() {
       setIsAnalyzingPriorities(true);
       try {
         const chatText = prepareChatText(conv);
-        const priorityMessages = buildPriorityMessages(chatText, name);
-        const result = await aiEngine.complete(priorityMessages);
+        const result = cloudEnabled
+          ? await cloudComplete('priorities', chatText, name)
+          : await aiEngine.complete(buildPriorityMessages(chatText, name));
         const parsed: PriorityData = parsePriorities(result);
         setPriorities(parsed);
       } catch (err) {
         console.error('Priority analysis failed:', err);
-        setPriorities(null);
-        setNotice({ kind: 'error', text: 'Could not analyse priorities. Try again.' });
+        setPriorities(heuristicPriorities(conv, name));
+        setNotice({ kind: 'error', text: 'AI priority analysis failed; showing rule-based results.' });
       }
       setIsAnalyzingPriorities(false);
     },
-    [prepareChatText],
+    [prepareChatText, cloudEnabled],
   );
 
   // --- Chat Import Handler ---
@@ -322,7 +335,9 @@ export default function App() {
 
   return (
     <Layout sidebar={sidebar}>
-      {/* Model Loader — always visible at top */}
+      {cloudAvailable && <CloudToggle enabled={cloudEnabled} onChange={setCloudEnabled} />}
+
+      {/* Local model loader (optional, fully on-device) */}
       <ModelLoader
         progress={modelProgress}
         onSelectModel={handleSelectModel}

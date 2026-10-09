@@ -32,10 +32,10 @@ export const PrivacyBadge: React.FC = () => {
       >
         <Lock className="w-4 h-4 text-green-400" />
         <span className="text-xs font-medium text-slate-300 hidden sm:inline-block">
-          100% Local · Your chats never leave this device
+          Local-first · Cloud AI is opt-in
         </span>
         <span className="text-xs font-medium text-slate-300 sm:hidden">
-          Local Mode
+          Local-first
         </span>
         <span className="relative flex h-2 w-2 ml-1">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
@@ -63,13 +63,14 @@ export const PrivacyBadge: React.FC = () => {
             </button>
           </div>
           <p className="text-sm text-slate-300 mb-2">
-            This app uses WebLLM to run AI models entirely within your browser.
+            By default your chats are analyzed on this device.
           </p>
           <ul className="text-xs text-slate-400 space-y-1.5 list-disc pl-4">
-            <li>Your chats are never uploaded anywhere</li>
-            <li>Only the model files are downloaded once (Hugging Face / GitHub), then cached</li>
-            <li>Processing happens on your device's GPU</li>
-            <li>Your chat logs remain completely private</li>
+            <li>Default: rule-based analysis runs fully in your browser</li>
+            <li>Optional local models (WebLLM) also run on-device</li>
+            <li>Cloud AI (Google Gemini) is off until you switch it on; then chat text is sent to Google via this app&apos;s server, and nothing is stored there</li>
+            <li>Local models download once (Hugging Face / GitHub), then are cached</li>
+            <li>Saved chats live only in this browser; you can delete them any time</li>
           </ul>
         </div>
       )}

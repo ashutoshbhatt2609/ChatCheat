@@ -78,7 +78,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, sidebar }) => {
       {/* Footer */}
       <footer className="flex-shrink-0 py-3 px-4 border-t border-slate-800 bg-slate-900 text-center z-20">
         <p className="text-xs text-slate-500 font-medium">
-          Powered by WebLLM · 100% Local AI
+          Local-first · WebLLM on-device or optional Gemini cloud AI
         </p>
       </footer>
     </div>
